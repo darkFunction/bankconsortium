@@ -1,0 +1,230 @@
+{
+  "id": "zeto",
+  "name": "Zeto transfer",
+  "tagline": "Zero-knowledge token — anonymous transfer with no notary",
+  "concept": "Zeto (ZKP): nobody — not even a notary or the regulator — can see amounts or parties. The base ledger holds only proofs and nullifiers, until an owner shares a viewing key.",
+  "columns": [
+    "cbdc",
+    "investor",
+    "custodian",
+    "regulator",
+    "base"
+  ],
+  "viewers": [
+    "omniscient",
+    "cbdc",
+    "investor",
+    "custodian",
+    "regulator",
+    "public"
+  ],
+  "steps": [
+    {
+      "title": "Central Bank mints Zeto cash to Bank A",
+      "plain": "A wholesale CBDC is issued as a Zeto token. The amount is hidden inside a cryptographic commitment — only Bank A can decrypt its own balance.",
+      "tech": "Zeto.mint({ to:BankA, amount:1000 }) → commitment 0x… on base ledger",
+      "badges": [
+        "priv",
+        "pub"
+      ]
+    },
+    {
+      "title": "Bank A holds anonymous UTXOs",
+      "plain": "Bank A owns the value as zero-knowledge UTXOs. There is no notary in the loop — no third party sees the balance at all.",
+      "tech": "UTXO set owned by BankA · spendable with ZK proof of ownership",
+      "badges": [
+        "priv"
+      ]
+    },
+    {
+      "title": "Bank A sends 50 to Bank B (anonymous)",
+      "plain": "Bank A initiates a private transfer of 50 to Bank B. The amounts and parties never appear in the clear.",
+      "tech": "Zeto.transfer(): nullify input UTXO → outputs to BankB + change to BankA",
+      "badges": [
+        "priv"
+      ]
+    },
+    {
+      "title": "A zero-knowledge proof is generated",
+      "plain": "A ZK proof shows the transfer is valid — inputs equal outputs, ownership is correct — without revealing a single number.",
+      "tech": "snark proof ✓ · proves balance conservation & authorisation",
+      "badges": [
+        "pub"
+      ]
+    },
+    {
+      "title": "Base ledger records nullifier + commitments",
+      "plain": "The shared ledger stores only a nullifier (so the old note can’t be respent) and new commitments. Anyone can verify it; no one can read it.",
+      "tech": "nullifier 0x… · outputCommitments[] recorded · verifier contract",
+      "badges": [
+        "pub"
+      ]
+    },
+    {
+      "title": "Bank B receives 50",
+      "plain": "Bank B can now decrypt its new note: 50. Only Bank B sees this — the Central Bank, the regulator and the public still see nothing.",
+      "tech": "BankB decrypts output note · balance += 50",
+      "badges": [
+        "priv"
+      ],
+      "motion": [
+        {
+          "label": "shielded",
+          "tone": "priv",
+          "shielded": true,
+          "from": "investor",
+          "to": "custodian"
+        }
+      ]
+    },
+    {
+      "title": "Regulator requests selective disclosure",
+      "plain": "For an audit, Bank A (or B) shares a viewing key for this one transfer. Now — and only now — the regulator can see A → B · 50. Privacy is selective, not absolute.",
+      "tech": "shareViewingKey(regulator, txId) → regulator decrypts: A→B 50",
+      "badges": [
+        "priv"
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "cbdc",
+      "kind": "pub",
+      "title": "Zeto token",
+      "detail": "ZKP UTXO contract",
+      "from": 0
+    },
+    {
+      "col": "cbdc",
+      "kind": "priv",
+      "see": [
+        "cbdc"
+      ],
+      "title": "Mint record",
+      "detail": "1,000 → Bank A (own record)",
+      "from": 0
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor"
+      ],
+      "title": "Zeto balance",
+      "detail": "1,000 · only you can decrypt",
+      "from": 0,
+      "until": 2
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor"
+      ],
+      "title": "Spend UTXO",
+      "detail": "nullify → 50 out, 950 change",
+      "from": 2
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor"
+      ],
+      "title": "Zeto balance",
+      "detail": "950 (change note)",
+      "from": 2
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "custodian"
+      ],
+      "title": "Incoming note",
+      "detail": "pending proof",
+      "from": 3,
+      "until": 5
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "custodian"
+      ],
+      "title": "Zeto balance",
+      "detail": "50 · only you can decrypt",
+      "from": 5,
+      "locked": false
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "regulator"
+      ],
+      "title": "No visibility",
+      "detail": "no notary · amounts hidden",
+      "from": 0,
+      "until": 6
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "regulator"
+      ],
+      "title": "Selective disclosure",
+      "detail": "viewing key → A→B 50",
+      "from": 6
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Commitment",
+      "detail": "0x… hides amount & owner",
+      "from": 0
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "ZK proof verified ✓",
+      "detail": "valid · no data revealed",
+      "from": 3
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Nullifier + commitments",
+      "detail": "0x… recorded",
+      "from": 4
+    }
+  ],
+  "parties": {
+    "cbdc": {
+      "name": "Central Bank",
+      "role": "CBDC issuer",
+      "kind": "inst"
+    },
+    "investor": {
+      "name": "Bank A",
+      "role": "Investor",
+      "kind": "inst"
+    },
+    "custodian": {
+      "name": "Bank B",
+      "role": "Custodian · notary",
+      "kind": "inst"
+    },
+    "regulator": {
+      "name": "Regulator",
+      "role": "Oversight authority",
+      "kind": "authority"
+    },
+    "base": {
+      "name": "Paladin base ledger",
+      "role": "Shared EVM · public",
+      "kind": "public"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "__doc__": "COPY ME → recordings/<id>.json, then add {id,name,tagline} to index.json. Delete the __doc__ / __*__ comment keys (JSON has no comments; the app ignores unknown keys but keep it tidy). Schema reference: BACKEND.md.",
+
+  "id": "myusecase",
+  "name": "My Use Case",
+  "tagline": "one short line shown beside the scenario tabs",
+  "concept": "the 'Why it matters' callout — the single idea a viewer should walk away with.",
+
+  "__columns__": "Ordered list of party ids = the on-screen columns. Each id MUST appear in `parties` below.",
+  "columns": ["partyA", "partyB", "authorityX", "ledger"],
+
+  "__viewers__": "Who you can 'View as'. Always include 'omniscient' (god view) and 'public' (outsider: sees only kind:pub). Add any participant/authority ids.",
+  "viewers": ["omniscient", "partyA", "partyB", "authorityX", "public"],
+
+  "__parties__": "Self-describing actor catalogue. kind: 'inst' (participant) | 'authority' (oversight; shield + tint) | 'public' (public ledger; green).",
+  "parties": {
+    "partyA":     { "name": "Party A",       "role": "role label",   "kind": "inst" },
+    "partyB":     { "name": "Party B",       "role": "role label",   "kind": "inst" },
+    "authorityX": { "name": "Authority",     "role": "oversight",    "kind": "authority" },
+    "ledger":     { "name": "Public ledger", "role": "shared chain", "kind": "public" }
+  },
+
+  "__groupLabels__": "OPTIONAL. Renames the two auto-derived column groups (participants vs public ledgers). Omit to use the defaults.",
+  "groupLabels": { "primary": "Institutions", "public": "Public ledgers" },
+
+  "__steps__": "One entry per stage, in order. plain = paragraph; tech = mono one-liner; badges = which of pub/priv this stage touches. motion (optional) animates a token between two columns.",
+  "steps": [
+    {
+      "title": "First stage",
+      "plain": "Plain-language explanation shown in the bottom rail.",
+      "tech": "optional mono line, e.g. an SDK call or RPC",
+      "badges": ["pub"]
+    },
+    {
+      "title": "A stage where value moves",
+      "plain": "Describe what happens.",
+      "tech": "someContract.method(...)",
+      "badges": ["priv", "pub"],
+      "motion": [
+        { "label": "TOKEN 100", "tone": "pub", "from": "partyA", "to": "partyB" }
+      ]
+    }
+  ],
+
+  "__facts__": "Ledger entries shown inside columns. Visible at step s in column c when: col==c AND from<=s AND (until==null OR s<until). kind 'pub' = on the shared/public ledger (everyone sees). kind 'priv' = restricted; list who can see it in `see`. `until` (exclusive) retires a fact; `locked` renders a lock + snap animation. `tone` for motion: 'pub' | 'priv' (add \"shielded\": true for hidden-amount transfers).",
+  "facts": [
+    { "col": "ledger", "kind": "pub",  "title": "Public anchor", "detail": "hash only", "from": 0 },
+    { "col": "partyA", "kind": "priv", "see": ["partyA", "authorityX"], "title": "Private holding", "detail": "amount", "from": 0, "until": 1 },
+    { "col": "partyB", "kind": "priv", "see": ["partyB", "authorityX"], "title": "Received", "detail": "amount", "from": 1 }
+  ]
+}

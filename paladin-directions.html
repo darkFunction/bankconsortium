@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Paladin Demo — Direction Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f5f6f9;
+    --app-bg: #f6f7fa;
+    --ink: #1b2230;
+    --ink-2: #3a4253;
+    --muted: #767e8d;
+    --faint: #a7adba;
+    --line: #e7e9ef;
+    --line-2: #d8dbe4;
+    --panel: #ffffff;
+
+    --public: #1c9268;
+    --public-ink: #0f6a4a;
+    --public-soft: #e8f5ef;
+    --public-line: #bfe3d3;
+
+    --private: #b0791a;
+    --private-ink: #8a5d10;
+    --private-soft: #f9f1dd;
+    --private-line: #ecd6a6;
+
+    --accent: #4b53c2;
+    --accent-ink: #393fa0;
+    --accent-soft: #ecedf9;
+    --accent-line: #c9ccf0;
+
+    --r-sm: 7px;
+    --r-md: 11px;
+    --r-lg: 16px;
+    --shadow: 0 1px 2px rgba(20,28,46,.05), 0 6px 18px rgba(20,28,46,.06);
+    --shadow-sm: 0 1px 2px rgba(20,28,46,.06);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: var(--ink); }
+
+  .pal { font-family: 'IBM Plex Sans', system-ui, sans-serif; color: var(--ink); background: var(--app-bg); }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+  .pal h1,.pal h2,.pal h3,.pal h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+  /* node card */
+  .node { position: absolute; background: var(--panel); border: 1px solid var(--line-2);
+    border-radius: var(--r-md); box-shadow: var(--shadow-sm); padding: 12px 14px; }
+  .node .nh { display: flex; align-items: center; gap: 8px; }
+  .node .ntitle { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+  .node .nrole { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .node .ndot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+
+  .swatch-pub { background: var(--public); }
+  .swatch-priv { background: var(--private); }
+  .swatch-acc { background: var(--accent); }
+
+  /* chips */
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px;
+    border-radius: 999px; font-size: 11.5px; font-weight: 500; border: 1px solid var(--line-2);
+    background: #fff; color: var(--ink-2); white-space: nowrap; }
+  .chip.mono { font-size: 11px; }
+  .chip-pub { background: var(--public-soft); border-color: var(--public-line); color: var(--public-ink); }
+  .chip-priv { background: var(--private-soft); border-color: var(--private-line); color: var(--private-ink); }
+  .chip-acc { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-ink); }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px;
+    border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+  .badge-pub { background: var(--public-soft); color: var(--public-ink); }
+  .badge-priv { background: var(--private-soft); color: var(--private-ink); }
+
+  .tabbtn { height: 30px; padding: 0 14px; border-radius: 8px; border: 1px solid transparent;
+    background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .tabbtn.on { background: #fff; color: var(--ink); border-color: var(--line-2); box-shadow: var(--shadow-sm); }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 600; letter-spacing: .01em; }
+  .pill-pub { background: var(--public-soft); color: var(--public-ink); border: 1px solid var(--public-line); }
+  .pill-priv { background: var(--private-soft); color: var(--private-ink); border: 1px solid var(--private-line); }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md); }
+  .btn { height: 34px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line-2); background: #fff;
+    font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); cursor: pointer; display:inline-flex; align-items:center; gap:7px; }
+  .btn-pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ico { width: 15px; height: 15px; display:inline-block; vertical-align:-2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="direction-a.jsx"></script>
+<script type="text/babel" src="direction-b.jsx"></script>
+<script type="text/babel" src="direction-c.jsx"></script>
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection id="main" title="Paladin Concept Demo — main view" subtitle="Three layout directions · hybrid network map + step inspector · pick one to build">
+          <DCArtboard id="a" label="A · Topology + Inspector" width={1300} height={900}>
+            <window.DirectionA />
+          </DCArtboard>
+          <DCArtboard id="b" label="B · Layered worlds (public base / private above)" width={1300} height={900}>
+            <window.DirectionB />
+          </DCArtboard>
+          <DCArtboard id="c" label="C · Institution ledger columns" width={1300} height={900}>
+            <window.DirectionC />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

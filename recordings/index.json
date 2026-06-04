@@ -1,0 +1,17 @@
+[
+  {
+    "id": "simple-token-transfer",
+    "name": "Simple token transfer",
+    "tagline": "Transfer ERC20 between banks"
+  },
+  {
+    "id": "bond",
+    "name": "Bond DvP",
+    "tagline": "Public Sepolia USDC ⇄ private Noto bond, settled atomically"
+  },
+  {
+    "id": "zeto",
+    "name": "Zeto transfer",
+    "tagline": "Zero-knowledge token — anonymous transfer with no notary"
+  }
+]

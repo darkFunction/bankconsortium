@@ -1,0 +1,455 @@
+{
+  "id": "bond",
+  "name": "Bond DvP",
+  "tagline": "Public Sepolia USDC ⇄ private Noto bond, settled atomically",
+  "concept": "Noto + Pente: the notary — and the regulator as a group observer — can see balances and positions. The outside world sees only state hashes and the public USDC leg.",
+  "columns": [
+    "issuer",
+    "custodian",
+    "investor",
+    "regulator",
+    "sepolia",
+    "base"
+  ],
+  "viewers": [
+    "omniscient",
+    "issuer",
+    "custodian",
+    "investor",
+    "regulator",
+    "public"
+  ],
+  "steps": [
+    {
+      "title": "Issue cash on Ethereum Sepolia",
+      "plain": "Bank A already holds a public USDC stablecoin balance on Ethereum Sepolia. This is the cash leg — fully public, like any ERC-20.",
+      "tech": "ERC-20 USDC · chainId 11155111 · balanceOf(BankA) = 100,000",
+      "badges": [
+        "pub"
+      ]
+    },
+    {
+      "title": "Form the Issuer ⇄ Custodian privacy group",
+      "plain": "The Bond Depository and Bank B spin up a private EVM group (Pente). Only its members — and the regulator, added as an observer — can see what happens inside. The base ledger only ever stores a hash of its state.",
+      "tech": "PenteFactory.newPrivacyGroup({ members:[issuer,custodian], evmVersion:\"shanghai\" })",
+      "badges": [
+        "priv"
+      ]
+    },
+    {
+      "title": "Deploy the bond — Noto token + private tracker",
+      "plain": "A Noto bond token is deployed. Its policy lives in a private ERC-20 \"tracker\" inside the privacy group (Noto hooks). The public bond tracker advertises face value & maturity to everyone.",
+      "tech": "Noto.newNoto({ notary:custodian, notaryMode:\"hooks\" }) → hooks: BondTracker (private)",
+      "badges": [
+        "priv",
+        "pub"
+      ]
+    },
+    {
+      "title": "Issue bond units to the custodian",
+      "plain": "The issuer mints 1,000 bond units into the custodian’s care. Inside the group everyone sees the position; the public ledger only learns that issuance started.",
+      "tech": "notoBond.mint({ to:custodian, amount:1000 }) → onMint hook → public tracker",
+      "badges": [
+        "priv",
+        "pub"
+      ]
+    },
+    {
+      "title": "Open distribution · allow-list Bank A",
+      "plain": "The custodian opens the bond for subscription and adds Bank A to the private allow-list. Who is allowed in is private to the group.",
+      "tech": "bondTracker.beginDistribution(...) · investorList.addInvestor(BankA)",
+      "badges": [
+        "priv"
+      ]
+    },
+    {
+      "title": "Bank A subscribes",
+      "plain": "Bank A and the custodian open a second privacy group and record a subscription for 100 units. The issuer is not in this group — it never learns who subscribed.",
+      "tech": "newPrivacyGroup({ members:[investor,custodian] }) · BondSubscription(units:100)",
+      "badges": [
+        "priv",
+        "pub"
+      ]
+    },
+    {
+      "title": "Lock the cash and lock the bond",
+      "plain": "Both legs are escrowed. Bank A locks 100 USDC on Sepolia (public). The custodian locks 100 bond units privately and prepares — but does not execute — an unlock to Bank A.",
+      "tech": "notoCash.lock(...) · prepareUnlock(...) → cashLockId, bondLockId",
+      "badges": [
+        "priv",
+        "pub"
+      ]
+    },
+    {
+      "title": "Assemble the Atom (bind both legs)",
+      "plain": "A single immutable Atom contract is deployed on the base ledger binding the two prepared transfers. It can only execute all-or-nothing, never partially.",
+      "tech": "AtomFactory.create([cashUnlock, bondUnlock]) → atom 0x9f…3a",
+      "badges": [
+        "pub"
+      ]
+    },
+    {
+      "title": "Execute the atomic swap (DvP)",
+      "plain": "The custodian fires the Atom. In one base-ledger transaction, 100 USDC moves to the custodian and 100 bond units move to Bank A. Neither party can be left short.",
+      "tech": "atom.execute() → unlock USDC → custodian · unlock BOND → BankA · tracker.supply−−",
+      "badges": [
+        "priv",
+        "pub"
+      ],
+      "motion": [
+        {
+          "label": "USDC 100",
+          "tone": "pub",
+          "from": "sepolia",
+          "to": "custodian"
+        },
+        {
+          "label": "BOND 100",
+          "tone": "priv",
+          "from": "custodian",
+          "to": "investor"
+        }
+      ]
+    },
+    {
+      "title": "Settled · public anchors updated",
+      "plain": "The trade is done. The public bond tracker now shows 900 available; both privacy-group state roots are re-anchored as fresh hashes. Privacy held throughout.",
+      "tech": "state roots updated · public tracker available = 900",
+      "badges": [
+        "pub"
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "sepolia",
+      "kind": "pub",
+      "title": "USDC · ERC-20",
+      "detail": "public stablecoin contract",
+      "from": 0
+    },
+    {
+      "col": "sepolia",
+      "kind": "pub",
+      "title": "Bank A wallet",
+      "detail": "100,000 USDC",
+      "from": 0,
+      "until": 8
+    },
+    {
+      "col": "sepolia",
+      "kind": "pub",
+      "title": "Escrow lock",
+      "detail": "Bank A · 100 USDC locked",
+      "from": 6,
+      "until": 8
+    },
+    {
+      "col": "sepolia",
+      "kind": "pub",
+      "title": "Transfer",
+      "detail": "Bank A → Bank B · 100 USDC",
+      "from": 8
+    },
+    {
+      "col": "sepolia",
+      "kind": "pub",
+      "title": "Bank A wallet",
+      "detail": "99,900 USDC",
+      "from": 8
+    },
+    {
+      "col": "issuer",
+      "kind": "priv",
+      "see": [
+        "issuer",
+        "custodian",
+        "regulator"
+      ],
+      "title": "Privacy group A",
+      "detail": "Pente · with Bank B",
+      "from": 1
+    },
+    {
+      "col": "issuer",
+      "kind": "priv",
+      "see": [
+        "issuer",
+        "custodian",
+        "regulator"
+      ],
+      "title": "Private bond tracker",
+      "detail": "ERC-20 hooks · mint/transfer policy",
+      "from": 2
+    },
+    {
+      "col": "issuer",
+      "kind": "priv",
+      "see": [
+        "issuer",
+        "custodian",
+        "regulator"
+      ],
+      "title": "Investor allow-list",
+      "detail": "Bank A approved",
+      "from": 4
+    },
+    {
+      "col": "issuer",
+      "kind": "pub",
+      "title": "Public supply (read)",
+      "detail": "sees only the aggregate",
+      "from": 3
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "issuer",
+        "custodian",
+        "regulator"
+      ],
+      "title": "Privacy group A",
+      "detail": "Pente · with Depository",
+      "from": 1
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "issuer",
+        "custodian",
+        "regulator"
+      ],
+      "title": "BOND custody",
+      "detail": "1,000 units",
+      "from": 3,
+      "until": 8
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "investor",
+        "custodian",
+        "regulator"
+      ],
+      "title": "Privacy group B",
+      "detail": "Pente · with Bank A",
+      "from": 5
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "issuer",
+        "custodian",
+        "investor",
+        "regulator"
+      ],
+      "title": "BOND lock",
+      "detail": "100 units → Bank A (prepared)",
+      "from": 6,
+      "until": 8,
+      "locked": true
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "issuer",
+        "custodian",
+        "regulator"
+      ],
+      "title": "BOND custody",
+      "detail": "900 units",
+      "from": 8
+    },
+    {
+      "col": "custodian",
+      "kind": "pub",
+      "title": "USDC received",
+      "detail": "100 on Sepolia",
+      "from": 8
+    },
+    {
+      "col": "investor",
+      "kind": "pub",
+      "title": "USDC on Sepolia",
+      "detail": "100,000 (public)",
+      "from": 0,
+      "until": 6
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor",
+        "custodian",
+        "regulator"
+      ],
+      "title": "Privacy group B",
+      "detail": "Pente · with Bank B",
+      "from": 5
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor",
+        "custodian",
+        "regulator"
+      ],
+      "title": "Subscription",
+      "detail": "100 units requested",
+      "from": 5
+    },
+    {
+      "col": "investor",
+      "kind": "pub",
+      "title": "USDC locked",
+      "detail": "100 escrowed for swap",
+      "from": 6,
+      "until": 8,
+      "locked": true
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor",
+        "custodian",
+        "regulator"
+      ],
+      "title": "BOND holding",
+      "detail": "100 units received",
+      "from": 8
+    },
+    {
+      "col": "investor",
+      "kind": "pub",
+      "title": "USDC on Sepolia",
+      "detail": "99,900 (after swap)",
+      "from": 8
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "regulator"
+      ],
+      "title": "Oversight access",
+      "detail": "observer in groups A & B",
+      "from": 1
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "regulator"
+      ],
+      "title": "Bond positions",
+      "detail": "read-only · 1,000 issued",
+      "from": 3
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "regulator"
+      ],
+      "title": "DvP verified",
+      "detail": "100 units ⇄ 100 USDC",
+      "from": 8
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Group A state root",
+      "detail": "hash only",
+      "from": 1
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Noto BOND contract",
+      "detail": "deployed",
+      "from": 2
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Public bond tracker",
+      "detail": "face 1 · maturity 2030",
+      "from": 2
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Bond Tracker supply",
+      "detail": "1,000 issued",
+      "from": 3,
+      "until": 8
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Group B state root",
+      "detail": "hash only",
+      "from": 5
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Atom · DvP",
+      "detail": "binds both legs · immutable",
+      "from": 7
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Atom executed ✓",
+      "detail": "all-or-nothing settled",
+      "from": 8
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Bond Tracker supply",
+      "detail": "available 900",
+      "from": 8
+    }
+  ],
+  "parties": {
+    "issuer": {
+      "name": "Bond Depository",
+      "role": "Issuer",
+      "kind": "inst"
+    },
+    "custodian": {
+      "name": "Bank B",
+      "role": "Custodian · notary",
+      "kind": "inst"
+    },
+    "investor": {
+      "name": "Bank A",
+      "role": "Investor",
+      "kind": "inst"
+    },
+    "regulator": {
+      "name": "Regulator",
+      "role": "Oversight authority",
+      "kind": "authority"
+    },
+    "sepolia": {
+      "name": "Ethereum Sepolia",
+      "role": "Public L1 network",
+      "kind": "public"
+    },
+    "base": {
+      "name": "Paladin base ledger",
+      "role": "Shared EVM · public",
+      "kind": "public"
+    }
+  }
+}

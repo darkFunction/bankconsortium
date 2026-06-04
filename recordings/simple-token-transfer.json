@@ -1,0 +1,186 @@
+{
+  "id": "simple-token-transfer",
+  "name": "Simple token transfer",
+  "tagline": "POC moving a token publicly within Paladin",
+  "concept": "Token moves from one party to another, and all members of the consortium chain have visibility",
+  "columns": [
+    "Bank A",
+    "Bank B",
+    "regulator",
+    "base"
+  ],
+  "viewers": [
+    "omniscient",
+    "Bank A",
+    "Bank B",
+    "regulator",
+    "public"
+  ],
+  "steps": [
+    {
+      "title": "Bank A mints tokenised deposits",
+      "plain": "A customer deposits tokens in their fiat account, and the bank tokenises them.",
+      "tech": "",
+      "badges": [
+        "pub"
+      ]
+    },
+    {
+      "title": "Bank A sends Bank B some tokens",
+      "plain": "Tokens are sent to Bank B's public wallet",
+      "tech": "",
+      "badges": [
+        "pub"
+      ],
+      "motion": [
+        {
+          "label": "transfer",
+          "tone": "pub",
+          "from": "Bank A",
+          "to": "Bank B"
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "Bank A",
+      "kind": "pub",
+      "title": "Tokenised deposit token",
+      "detail": "1000",
+      "from": 0
+    },
+    {
+      "col": "cbdc",
+      "kind": "priv",
+      "see": [
+        "cbdc"
+      ],
+      "title": "Mint record",
+      "detail": "1,000 → Bank A (own record)",
+      "from": 0
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor"
+      ],
+      "title": "Zeto balance",
+      "detail": "1,000 · only you can decrypt",
+      "from": 0,
+      "until": 2
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor"
+      ],
+      "title": "Spend UTXO",
+      "detail": "nullify → 50 out, 950 change",
+      "from": 2
+    },
+    {
+      "col": "investor",
+      "kind": "priv",
+      "see": [
+        "investor"
+      ],
+      "title": "Zeto balance",
+      "detail": "950 (change note)",
+      "from": 2
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "custodian"
+      ],
+      "title": "Incoming note",
+      "detail": "pending proof",
+      "from": 3,
+      "until": 5
+    },
+    {
+      "col": "custodian",
+      "kind": "priv",
+      "see": [
+        "custodian"
+      ],
+      "title": "Zeto balance",
+      "detail": "50 · only you can decrypt",
+      "from": 5,
+      "locked": false
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "regulator"
+      ],
+      "title": "No visibility",
+      "detail": "no notary · amounts hidden",
+      "from": 0,
+      "until": 6
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "regulator"
+      ],
+      "title": "Selective disclosure",
+      "detail": "viewing key → A→B 50",
+      "from": 6
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Commitment",
+      "detail": "0x… hides amount & owner",
+      "from": 0
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "ZK proof verified ✓",
+      "detail": "valid · no data revealed",
+      "from": 3
+    },
+    {
+      "col": "base",
+      "kind": "pub",
+      "title": "Nullifier + commitments",
+      "detail": "0x… recorded",
+      "from": 4
+    }
+  ],
+  "parties": {
+    "cbdc": {
+      "name": "Central Bank",
+      "role": "CBDC issuer",
+      "kind": "inst"
+    },
+    "investor": {
+      "name": "Bank A",
+      "role": "Investor",
+      "kind": "inst"
+    },
+    "custodian": {
+      "name": "Bank B",
+      "role": "Custodian · notary",
+      "kind": "inst"
+    },
+    "regulator": {
+      "name": "Regulator",
+      "role": "Oversight authority",
+      "kind": "authority"
+    },
+    "base": {
+      "name": "Paladin base ledger",
+      "role": "Shared EVM · public",
+      "kind": "public"
+    }
+  }
+}
