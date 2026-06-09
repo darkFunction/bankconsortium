@@ -1,0 +1,147 @@
+{
+  "id": "simple-token",
+  "name": "Simple ERC-20 Token",
+  "tagline": "Bank-to-bank ERC-20 on the permissioned ledger — invisible to the public chain",
+  "concept": "The consortium runs a permissioned shared EVM. Banks deploy and move an ERC-20 there, and every consortium member can verify it — but the public, watching only Ethereum Sepolia, sees none of it. Permissioned ≠ public.",
+  "columns": [
+    "bankA",
+    "bankB",
+    "ledger",
+    "sepolia"
+  ],
+  "viewers": [
+    "bankA",
+    "bankB",
+    "consortium",
+    "public"
+  ],
+  "parties": {
+    "bankA": {
+      "name": "Bank A",
+      "role": "Consortium member",
+      "kind": "inst"
+    },
+    "bankB": {
+      "name": "Bank B",
+      "role": "Consortium member",
+      "kind": "inst"
+    },
+    "ledger": {
+      "name": "Consortium ledger",
+      "role": "Permissioned shared EVM",
+      "kind": "consortium",
+      "viewer": "consortium"
+    },
+    "sepolia": {
+      "name": "Ethereum Sepolia",
+      "role": "Public L1 network",
+      "kind": "public",
+      "viewer": "public"
+    },
+    "consortium": {
+      "name": "Consortium member",
+      "role": "Observer node",
+      "kind": "consortium"
+    }
+  },
+  "groupLabels": {
+    "primary": "Banks",
+    "consortium": "Permissioned consortium ledger",
+    "public": "Public network"
+  },
+  "steps": [
+    {
+      "title": "Bank A deploys the eGBP token",
+      "plain": "Bank A deploys GBP Token (eGBP), an ERC-20, onto the consortium ledger.",
+      "tech": "ERC20Simple.deploy({ name:\"GBPToken\", symbol:\"eGBP\" }) → 0x2253928fbdef747efd8404d1330e596de51139a3",
+      "badges": [
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "Deploy eGBP",
+          "tone": "perm",
+          "from": "bankA",
+          "to": "ledger"
+        }
+      ]
+    },
+    {
+      "title": "Mint 1,000,000 eGBP to Bank A",
+      "plain": "Bank A mints the initial supply to its own address on the consortium ledger.",
+      "tech": "mint({ to:0x826896f63a0ddc46ea137571ab0a7cc50b5d5dbd, amount:1,000,000 eGBP }) → 0x47e0e223d102cf6e22b0f60ef23d256ae04ec4032d458c677440558c74fc6e62",
+      "badges": [
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "eGBP 1,000,000",
+          "tone": "perm",
+          "from": "ledger",
+          "to": "bankA"
+        }
+      ]
+    },
+    {
+      "title": "Bank A transfers 250,000 eGBP to Bank B",
+      "plain": "Bank A sends 250,000 eGBP to Bank B. Every consortium member can verify the transfer on the shared ledger — but to the public, watching only Sepolia, nothing happened.",
+      "tech": "transfer({ to:0x04aa3a509ce5d0aa0f2cc0ec5510668438408c89, amount:250,000 eGBP }) → 0x3a38f0ff58fdc48bd7a392cdbecf7b4bd2ed96e9ba09f004a01bea9bacf92515",
+      "badges": [
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "eGBP 250,000",
+          "tone": "perm",
+          "from": "bankA",
+          "to": "bankB"
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "eGBP · ERC-20",
+      "detail": "deployed at 0x2253928fbdef747efd8404d1330e596de51139a3",
+      "from": 0
+    },
+    {
+      "col": "bankA",
+      "kind": "perm",
+      "title": "eGBP balance",
+      "detail": "1,000,000 eGBP",
+      "from": 1,
+      "until": 2
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Token supply",
+      "detail": "1,000,000 eGBP",
+      "from": 1
+    },
+    {
+      "col": "bankA",
+      "kind": "perm",
+      "title": "eGBP balance",
+      "detail": "750,000 eGBP",
+      "from": 2
+    },
+    {
+      "col": "bankB",
+      "kind": "perm",
+      "title": "eGBP balance",
+      "detail": "250,000 eGBP received",
+      "from": 2
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Transfer recorded",
+      "detail": "Bank A → Bank B · 250,000 eGBP",
+      "from": 2
+    }
+  ]
+}

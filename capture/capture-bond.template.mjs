@@ -43,7 +43,7 @@ import { writeFileSync } from 'node:fs';
 const recording = {
   id: 'bond',
   name: 'Bond DvP',
-  tagline: 'yyyPublic Sepolia USDC \u21c4 private Noto bond, settled atomically',
+  tagline: 'Public Sepolia USDC \u21c4 private Noto bond, settled atomically',
   concept: 'Noto + Pente: the notary \u2014 and the regulator as a group observer \u2014 can see balances and positions. The outside world sees only state hashes and the public USDC leg.',
   columns: ['issuer', 'custodian', 'investor', 'regulator', 'sepolia', 'base'],
   viewers: ['omniscient', 'issuer', 'custodian', 'investor', 'regulator', 'public'],

@@ -16,10 +16,16 @@
  */
 (function () {
   // ---- Option A visibility: declared via each fact's `see` list ----
+  // Three tiers of disclosure:
+  //   pub  — on a genuinely public chain (e.g. Sepolia): everyone, incl. outsiders
+  //   perm — on the permissioned consortium ledger: every consortium member, but
+  //          NOT the public (this is what makes "permissioned ≠ public" visible)
+  //   priv — restricted to an explicit `see` list (private groups / holdings)
   function declaredCanSee(fact, viewer) {
     if (viewer === 'omniscient') return true;     // demo god-view
-    if (fact.kind === 'pub') return true;          // public = everyone
-    if (viewer === 'public') return false;         // outsider sees only public
+    if (fact.kind === 'pub') return true;          // public chain = everyone
+    if (viewer === 'public') return false;         // outsider sees only pub
+    if (fact.kind === 'perm') return true;         // permissioned: any consortium viewer
     return !!(fact.see && fact.see.indexOf(viewer) !== -1);
   }
 

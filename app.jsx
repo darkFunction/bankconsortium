@@ -29,33 +29,45 @@
   }
   function viewerLabel(v, parties) {
     if (v === 'omniscient') return 'Omniscient';
-    if (v === 'public') return 'Public / outsider';
+    if (v === 'public') return 'Public';
     return (parties[v] || {}).name || v;
   }
+  // Shorten Ethereum addresses / tx hashes (0x + 40 or 64 hex) for display.
+  function shortHex(s) {
+    return typeof s === 'string'
+      ? s.replace(/0x[0-9a-fA-F]{40,}/g, m => m.slice(0, 6) + '…' + m.slice(-4))
+      : s;
+  }
+
+  /* ---------- disclosure tiers (pub | perm | priv) ---------- */
+  const TONE = {
+    pub:  { cls: 'pub',  dot: 'var(--public)',     ink: 'var(--public-ink)' },
+    perm: { cls: 'perm', dot: 'var(--consortium)', ink: 'var(--consortium-ink)' },
+    priv: { cls: 'priv', dot: 'var(--private)',    ink: 'var(--private-ink)' },
+  };
 
   /* ---------- ledger entry ---------- */
   function Entry({ fact, viewer, step }) {
     const visible = canSee(fact, viewer);
     const isNew = fact.from === step;
-    const pub = fact.kind === 'pub';
     if (!visible) {
       return (
         <div className={'entry redacted' + (isNew ? ' pop' : '')}>
-          <div className="redrow"><LockIco s={12} /><span>Private — hidden</span></div>
+          <div className="redrow"><LockIco s={12} /><span>Hidden from you</span></div>
         </div>
       );
     }
-    const tone = pub ? 'pub' : 'priv';
+    const t = TONE[fact.kind] || TONE.priv;
     return (
-      <div className={'entry ' + tone + (isNew ? ' pop' : '')}>
+      <div className={'entry ' + t.cls + (isNew ? ' pop' : '')}>
         <div className="erow">
           {fact.locked
-            ? <span className={'lockwrap ' + (isNew ? 'snap' : '')} style={{ color: pub ? 'var(--public)' : 'var(--private)' }}><LockIco s={12} /></span>
-            : <span className="edot" style={{ background: pub ? 'var(--public)' : 'var(--private)' }} />}
-          <span className="etitle" style={{ color: pub ? 'var(--public-ink)' : 'var(--private-ink)' }}>{fact.title}</span>
+            ? <span className={'lockwrap ' + (isNew ? 'snap' : '')} style={{ color: t.dot }}><LockIco s={12} /></span>
+            : <span className="edot" style={{ background: t.dot }} />}
+          <span className="etitle" style={{ color: t.ink }}>{fact.title}</span>
           {isNew && <span className="newtag">new</span>}
         </div>
-        <div className="mono edet" style={{ color: pub ? 'var(--public-ink)' : 'var(--private-ink)' }}>{fact.detail}</div>
+        <div className="mono edet" style={{ color: t.ink }}>{shortHex(fact.detail)}</div>
       </div>
     );
   }
@@ -63,16 +75,20 @@
   /* ---------- column ---------- */
   function Column({ colId, scn, parties, viewer, step, colRef }) {
     const party = parties[colId] || { name: colId, role: '', kind: 'inst' };
-    const isYou = viewer === colId;
+    // A column is "yours" when its id matches the viewer, or when its party
+    // declares it represents this viewer (e.g. ledger ⇒ consortium, sepolia ⇒ public).
+    const isYou = viewer === colId || party.viewer === viewer;
     const isPub = party.kind === 'public';
     const isAuth = party.kind === 'authority';
+    const isCons = party.kind === 'consortium';
     const facts = activeFacts(scn, step).filter(f => f.col === colId);
-    const headTint = isYou ? 'var(--accent-soft)' : isPub ? 'var(--public-soft)' : isAuth ? 'var(--authority-soft)' : '#fff';
+    const headTint = isYou ? 'var(--accent-soft)' : isPub ? 'var(--public-soft)' : isCons ? 'var(--consortium-soft)' : isAuth ? 'var(--authority-soft)' : '#fff';
+    const dotColor = isPub ? 'var(--public)' : isCons ? 'var(--consortium)' : isAuth ? 'var(--authority)' : 'var(--ink)';
     return (
       <div className={'col' + (isYou ? ' you' : '')}>
         <div className="col-head" ref={colRef} style={{ background: headTint }}>
           <div className="ch-top">
-            <span className="ndot" style={{ background: isPub ? 'var(--public)' : isAuth ? 'var(--authority)' : 'var(--ink)' }} />
+            <span className="ndot" style={{ background: dotColor }} />
             <span className="ch-name">{party.name}</span>
             {isAuth && <span className="reg-ico" style={{ color: 'var(--authority)' }}><Shield s={14} /></span>}
             {isYou && <span className="youtag">VIEWING</span>}
@@ -98,11 +114,12 @@
     }, []);
     const x = go ? flight.x1 : flight.x0;
     const y = go ? flight.y1 : flight.y0;
+    // Redacted: the viewer can't see this transfer — show a lock, never the amount.
     return (
-      <div className={'flychip ' + flight.tone + (flight.shielded ? ' shielded' : '')}
+      <div className={'flychip ' + flight.tone + (flight.redacted ? ' redacted' : '') + (flight.shielded ? ' shielded' : '')}
         style={{ left: x, top: y, opacity: go ? 1 : 0.001, transitionDelay: (flight.delay || 0) + 'ms' }}>
-        {flight.shielded ? <span className="shield-mark">▦</span> : null}
-        {flight.label}
+        {flight.redacted ? <LockIco s={12} /> : flight.shielded ? <span className="shield-mark">▦</span> : null}
+        {flight.redacted ? 'Private' : flight.label}
       </div>
     );
   }
@@ -110,7 +127,7 @@
   /* ---------- main ---------- */
   function App() {
     const load = (k, d) => { try { const v = localStorage.getItem('palDemo.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
-    const [scnId, setScnId] = useState(() => load('scenario', 'bond'));
+    const [scnId, setScnId] = useState(() => load('scenario', 'simple-token'));
     const [step, setStep] = useState(() => load('step', 0));
     const [viewer, setViewer] = useState(() => load('viewer', 'omniscient'));
     const [auto, setAuto] = useState(false);
@@ -124,8 +141,14 @@
     const colRefs = useRef({});
     const stageRef = useRef(null);
 
-    // load scenario list (sync for mock, async-capable for replay sources)
-    useEffect(() => { Promise.resolve(DS.listScenarios()).then(setScenarios); }, []);
+    // load scenario list (sync for mock, async-capable for replay sources);
+    // fall back to the first scenario if a stale/removed id is selected.
+    useEffect(() => {
+      Promise.resolve(DS.listScenarios()).then(list => {
+        setScenarios(list);
+        if (list.length && !list.some(s => s.id === scnId)) { setScnId(list[0].id); setStep(0); }
+      });
+    }, []);
     // load the active recording (sync for mock, fetched for replay)
     useEffect(() => {
       let alive = true;
@@ -135,8 +158,8 @@
       return () => { alive = false; };
     }, [scnId]);
 
-    // clamp viewer / step to the loaded recording
-    useEffect(() => { if (scn && scn.viewers.indexOf(viewer) === -1) setViewer('omniscient'); }, [recording]);
+    // clamp viewer / step to the loaded recording (fall back to its first viewer)
+    useEffect(() => { if (scn && scn.viewers.indexOf(viewer) === -1) setViewer(scn.viewers[0]); }, [recording]);
     useEffect(() => { if (scn && step > last) setStep(last); }, [recording]);
     useEffect(() => { localStorage.setItem('palDemo.scenario', JSON.stringify(scnId)); }, [scnId]);
     useEffect(() => { localStorage.setItem('palDemo.step', JSON.stringify(step)); }, [step]);
@@ -173,17 +196,29 @@
       const fl = [];
       m.forEach((mv, i) => {
         const a = center(mv.from), b = center(mv.to); if (!a || !b) return;
-        fl.push({ id: scnId + '-' + cur + '-' + i + '-' + Date.now(), label: mv.label, tone: mv.tone, shielded: mv.shielded, delay: i * 220, x0: a.x - 34, y0: a.y, x1: b.x - 34, y1: b.y });
+        // A motion is a moving fact: redact it for viewers who can't see this tier.
+        const seen = canSee({ kind: mv.tone, see: mv.see }, viewer);
+        fl.push({ id: scnId + '-' + cur + '-' + i + '-' + viewer + '-' + Date.now(), label: mv.label, tone: mv.tone, redacted: !seen, shielded: mv.shielded, delay: i * 220, x0: a.x - 34, y0: a.y, x1: b.x - 34, y1: b.y });
       });
       if (fl.length) setFlights(f => f.concat(fl));
+      // Fire on step change only (not viewer change); visibility is still
+      // evaluated against whichever viewer is active at the moment we step.
     }, [scnId, cur]);
 
     if (!scn) return (<div className="pal app" style={{ alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 24 }}><div style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5, maxWidth: 460 }}>{loadErr ? <span>Couldn’t load <span className="mono">recordings/{scnId}.json</span> ({loadErr}).<br />Serve the project over HTTP (see BACKEND.md) — not a <span className="mono">file://</span> path.</span> : 'Loading…'}</div></div>);
     const PT = scn.parties || {};
-    const groupLabels = scn.groupLabels || { primary: 'Institutions', public: 'Public ledgers' };
+    const groupLabels = scn.groupLabels || {};
     const stepData = scn.steps[cur];
-    const instCols = scn.columns.filter(c => (PT[c] || {}).kind !== 'public');
-    const pubCols = scn.columns.filter(c => (PT[c] || {}).kind === 'public');
+    // Columns auto-group by party kind, in a fixed visual order. Each group is
+    // driven by kind (never a hard-coded id), so any use case can have any mix.
+    const GROUP_DEFS = [
+      { key: 'primary',    label: groupLabels.primary    || 'Institutions',                kinds: ['inst', 'authority'] },
+      { key: 'consortium', label: groupLabels.consortium || 'Permissioned consortium ledger', kinds: ['consortium'] },
+      { key: 'public',     label: groupLabels.public     || 'Public ledgers',               kinds: ['public'] },
+    ];
+    const groups = GROUP_DEFS
+      .map(g => ({ ...g, cols: scn.columns.filter(c => g.kinds.indexOf((PT[c] || {}).kind) !== -1) }))
+      .filter(g => g.cols.length > 0);
 
     return (
       <div className="pal app">
@@ -209,9 +244,9 @@
           <span className="vlabel">View as</span>
           <div className="vpills">
             {scn.viewers.map(v => {
-              const vp = PT[v]; const isAuth = !!(vp && vp.kind === 'authority');
+              const vp = PT[v]; const isAuth = !!(vp && vp.kind === 'authority'); const isCons = !!(vp && vp.kind === 'consortium');
               return (
-                <button key={v} className={'vpill' + (v === viewer ? ' on' : '') + (isAuth ? ' authority' : '') + (v === 'public' ? ' pub' : '')} onClick={() => setViewer(v)}>
+                <button key={v} className={'vpill' + (v === viewer ? ' on' : '') + (isAuth ? ' authority' : '') + (isCons ? ' consortium' : '') + (v === 'public' ? ' pub' : '')} onClick={() => setViewer(v)}>
                   {isAuth && <Shield s={12} />}
                   {viewerLabel(v, PT)}
                 </button>
@@ -220,7 +255,8 @@
           </div>
           <div className="spacer" />
           <div className="legend">
-            <span className="lg"><span className="ndot" style={{ background: 'var(--public)' }} /> Public · on shared ledger</span>
+            <span className="lg"><span className="ndot" style={{ background: 'var(--public)' }} /> Public · public chain</span>
+            <span className="lg"><span className="ndot" style={{ background: 'var(--consortium)' }} /> Permissioned · consortium-only</span>
             <span className="lg"><span className="ndot" style={{ background: 'var(--private)' }} /> Private · restricted</span>
             <span className="lg"><Eye off /> hidden from you</span>
           </div>
@@ -241,17 +277,23 @@
 
         {/* columns */}
         <div className="stage" ref={stageRef}>
-          {(instCols.length > 0 || pubCols.length > 0) && (
+          {groups.length > 0 && (
             <div className="grouprow">
-              {instCols.length > 0 && <div className="gcap" style={{ flex: instCols.length }}>{groupLabels.primary}</div>}
-              {instCols.length > 0 && pubCols.length > 0 && <div className="gdiv" />}
-              {pubCols.length > 0 && <div className="gcap pub" style={{ flex: pubCols.length }}>{groupLabels.public}</div>}
+              {groups.map((g, gi) => (
+                <React.Fragment key={g.key}>
+                  {gi > 0 && <div className="gdiv" />}
+                  <div className={'gcap gcap-' + g.key} style={{ flex: g.cols.length }}>{g.label}</div>
+                </React.Fragment>
+              ))}
             </div>
           )}
           <div className="cols">
-            {instCols.map(c => <Column key={c} colId={c} scn={scn} parties={PT} viewer={viewer} step={cur} colRef={el => (colRefs.current[c] = el)} />)}
-            {instCols.length > 0 && pubCols.length > 0 && <div className="cols-div" />}
-            {pubCols.map(c => <Column key={c} colId={c} scn={scn} parties={PT} viewer={viewer} step={cur} colRef={el => (colRefs.current[c] = el)} />)}
+            {groups.map((g, gi) => (
+              <React.Fragment key={g.key}>
+                {gi > 0 && <div className="cols-div" />}
+                {g.cols.map(c => <Column key={c} colId={c} scn={scn} parties={PT} viewer={viewer} step={cur} colRef={el => (colRefs.current[c] = el)} />)}
+              </React.Fragment>
+            ))}
           </div>
           {/* motion layer */}
           <div className="flylayer">
@@ -264,12 +306,12 @@
           <div className="rail-main">
             <div className="rail-meta">
               <span className="stepno">Step {String(cur + 1).padStart(2, '0')} / {String(scn.steps.length).padStart(2, '0')}</span>
-              {stepData.badges.map(b => <span key={b} className={'badge badge-' + b}>{b === 'pub' ? 'Public' : 'Private'}</span>)}
+              {stepData.badges.map(b => <span key={b} className={'badge badge-' + b}>{b === 'pub' ? 'Public' : b === 'perm' ? 'Permissioned' : 'Private'}</span>)}
               {viewer !== 'omniscient' && <span className="vhint">· viewing as {viewerLabel(viewer, PT)}</span>}
             </div>
             <h2 className="rail-title">{stepData.title}</h2>
             <p className="rail-plain">{stepData.plain}</p>
-            <div className="mono rail-tech">{stepData.tech}</div>
+            <div className="mono rail-tech">{shortHex(stepData.tech)}</div>
           </div>
           <div className="rail-side">
             <div className="concept"><span className="ctitle">Why it matters</span>{scn.concept}</div>
