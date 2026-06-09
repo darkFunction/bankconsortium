@@ -1,12 +1,13 @@
 {
   "id": "noto-bond",
-  "name": "Noto Bond (CSD notary)",
-  "tagline": "Private bond — only the notary and counterparties see the amounts",
-  "concept": "A Noto bond issued by a Central Securities Depository (the notary). Balances are private notes: the notary and the counterparties of each transfer see the amounts, while other consortium members see only that transactions happened — never how much. The public sees nothing.",
+  "name": "Noto Bond (CSD notary + Regulator)",
+  "tagline": "Private bond — notary & counterparties see amounts; a Regulator oversees via a Pente group",
+  "concept": "A Noto bond with the CSD as notary, run in hooks mode. Policy executes in a Pente privacy group {CSD, Regulator}, mirroring balances as a private ERC-20. So the Regulator sees every position without ever being a counterparty — while the banks see only their own coins. A plain consortium member sees only opaque, indistinguishable Pente-group transitions (mint and transfer look identical, and even the on-chain notary is the Pente group, not the CSD). The public sees nothing.",
   "columns": [
     "csd",
     "bankA",
     "bankB",
+    "regulator",
     "ledger",
     "sepolia"
   ],
@@ -14,30 +15,48 @@
     "csd",
     "bankA",
     "bankB",
-    "observer",
+    "regulator",
+    "consortium",
     "public"
   ],
+  "groups": {
+    "oversight": {
+      "name": "Oversight (Pente)",
+      "short": "Oversight"
+    }
+  },
   "parties": {
     "csd": {
       "name": "Central Securities Depository",
-      "role": "Notary · sees all bond states",
-      "kind": "authority"
+      "role": "Notary · sees all",
+      "kind": "authority",
+      "groups": [
+        "oversight"
+      ]
     },
     "bankA": {
       "name": "Bank A",
-      "role": "Consortium member",
+      "role": "Bond holder",
       "kind": "inst"
     },
     "bankB": {
       "name": "Bank B",
-      "role": "Consortium member",
+      "role": "Bond holder",
       "kind": "inst"
+    },
+    "regulator": {
+      "name": "Regulator",
+      "role": "Oversight · Pente member",
+      "kind": "authority",
+      "groups": [
+        "oversight"
+      ]
     },
     "ledger": {
       "name": "Consortium ledger",
       "role": "Permissioned shared EVM",
       "kind": "consortium",
-      "viewer": "observer"
+      "viewer": "consortium"
     },
     "sepolia": {
       "name": "Ethereum Sepolia",
@@ -45,30 +64,31 @@
       "kind": "public",
       "viewer": "public"
     },
-    "observer": {
-      "name": "Consortium observer",
-      "role": "Member · not a bond party",
+    "consortium": {
+      "name": "Consortium member",
+      "role": "On the chain · not a bond party, not in the group",
       "kind": "consortium"
     }
   },
   "groupLabels": {
-    "primary": "Notary & banks",
+    "primary": "Consortium parties",
     "consortium": "Permissioned consortium ledger",
     "public": "Public network"
   },
   "steps": [
     {
-      "title": "CSD issues the bond on the consortium ledger",
-      "plain": "The Central Securities Depository deploys a private Noto bond token and is its notary. The base ledger records only that the contract exists.",
-      "tech": "Noto.newNoto({ name:\"BOND\", notary: csd, notaryMode:\"basic\" }) → 0x06dd9ab3bc74f74112823933d0253ea0fd576a8d",
+      "title": "CSD forms the oversight group & issues the bond (hooks mode)",
+      "plain": "The CSD and Regulator form a Pente privacy group. The CSD deploys the bond as a Noto token whose policy runs in that group via hooks (a private ERC-20 tracker), so the Regulator can oversee every move.",
+      "tech": "pente.newPrivacyGroup({ members:[csd,regulator] }); Noto.newNoto({ notary:csd, notaryMode:\"hooks\" }) → 0xd77e6ef9a5a63f303b40fa12c2c94128e50c1ba7",
       "badges": [
+        "priv",
         "perm"
       ]
     },
     {
       "title": "CSD mints 1,000 BOND to Bank A",
-      "plain": "Only the notary and the recipient (Bank A) can see the amount. Other consortium members see only that an issuance happened.",
-      "tech": "bond.mint({ to: bankA, amount: 1000 })",
+      "plain": "The notary and recipient (Bank A) see the coin; the onMint hook records it in the Pente tracker, so the Regulator sees the position too — without holding anything.",
+      "tech": "bond.mint({ to: bankA, amount: 1000 })  ·  onMint → tracker._mint(bankA, 1000)",
       "badges": [
         "priv",
         "perm"
@@ -88,8 +108,8 @@
     },
     {
       "title": "Bank A transfers 300 BOND to Bank B",
-      "plain": "The notary, Bank A (sender) and Bank B (receiver) see the amount — Bank A even keeps visibility of Bank B's new note. The observer sees only that a transfer occurred; the public sees nothing.",
-      "tech": "bond.transfer({ to: bankB, amount: 300 })",
+      "plain": "Bank A (sender), Bank B (receiver) and the notary see the amount; the onTransfer hook updates the tracker, so the Regulator sees both new positions. Other consortium members see only the masked tx; the public sees nothing.",
+      "tech": "bond.transfer({ to: bankB, amount: 300 })  ·  onTransfer → tracker._transfer(bankA, bankB, 300)",
       "badges": [
         "priv",
         "perm"
@@ -112,16 +132,33 @@
   "facts": [
     {
       "col": "csd",
-      "kind": "perm",
-      "title": "Notary",
-      "detail": "co-signs every move · sees all amounts",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "bankA",
+        "bankB",
+        "regulator"
+      ],
+      "title": "Notary = CSD",
+      "detail": "co-signs every move · known to participants, not to outside observers",
       "from": 0
     },
     {
       "col": "ledger",
       "kind": "perm",
       "title": "Noto BOND contract",
-      "detail": "deployed · 0x06dd9ab3bc74f74112823933d0253ea0fd576a8d",
+      "detail": "deployed · name \"BOND\" public · notary is a Pente group 0xb5856a63202106514a49edc10387ee278865e892 (members hidden)",
+      "from": 0
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "regulator"
+      ],
+      "title": "Bond tracker (Pente)",
+      "detail": "private ERC-20 mirror · oversight group",
       "from": 0
     },
     {
@@ -139,9 +176,21 @@
     {
       "col": "ledger",
       "kind": "perm",
-      "title": "Issuance recorded",
-      "detail": "mint tx · amount hidden",
+      "title": "Bond contract activity",
+      "detail": "opaque Pente-group tx · masked Transfer event (state hashes)",
       "from": 1
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "regulator"
+      ],
+      "title": "Tracked positions",
+      "detail": "Bank A: 1,000",
+      "from": 1,
+      "until": 2
     },
     {
       "col": "bankA",
@@ -169,8 +218,19 @@
     {
       "col": "ledger",
       "kind": "perm",
-      "title": "Transfer recorded",
-      "detail": "transfer tx · amounts hidden",
+      "title": "Bond contract activity",
+      "detail": "opaque Pente-group tx · masked Transfer event (state hashes)",
+      "from": 2
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "regulator"
+      ],
+      "title": "Tracked positions",
+      "detail": "Bank A: 700 · Bank B: 300",
       "from": 2
     }
   ]

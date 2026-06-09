@@ -1,0 +1,197 @@
+{
+  "id": "zeto-kyc",
+  "name": "Zeto + Regulator (KYC)",
+  "tagline": "ZK transfer — amounts hidden from everyone, even the Regulator; who gates participation by KYC",
+  "concept": "A zero-knowledge Zeto transfer with no notary and no hook. The Regulator is the KYC authority: it admits or blocks participants (every transfer's ZK proof must prove sender & recipient are registered). But Zeto hides amounts from everyone except the owning party — so the Regulator gates WHO may transact, yet can see neither how much nor between whom. Other consortium members and the public see only ZK commitments/nullifiers.",
+  "columns": [
+    "regulator",
+    "bankA",
+    "bankB",
+    "ledger",
+    "sepolia"
+  ],
+  "viewers": [
+    "regulator",
+    "bankA",
+    "bankB",
+    "consortium",
+    "public"
+  ],
+  "groups": {
+    "kyc": {
+      "name": "KYC registry",
+      "short": "KYC ✓"
+    }
+  },
+  "parties": {
+    "regulator": {
+      "name": "Regulator",
+      "role": "KYC authority · gates participation",
+      "kind": "authority"
+    },
+    "bankA": {
+      "name": "Bank A",
+      "role": "Participant · KYC-admitted",
+      "kind": "inst",
+      "groups": [
+        "kyc"
+      ]
+    },
+    "bankB": {
+      "name": "Bank B",
+      "role": "Participant · KYC-admitted",
+      "kind": "inst",
+      "groups": [
+        "kyc"
+      ]
+    },
+    "ledger": {
+      "name": "Consortium ledger",
+      "role": "Permissioned shared EVM",
+      "kind": "consortium",
+      "viewer": "consortium"
+    },
+    "sepolia": {
+      "name": "Ethereum Sepolia",
+      "role": "Public L1 network",
+      "kind": "public",
+      "viewer": "public"
+    },
+    "consortium": {
+      "name": "Consortium member",
+      "role": "On the chain · not a participant",
+      "kind": "consortium"
+    }
+  },
+  "groupLabels": {
+    "primary": "Regulator & banks",
+    "consortium": "Permissioned consortium ledger",
+    "public": "Public network"
+  },
+  "steps": [
+    {
+      "title": "Regulator deploys a KYC-gated Zeto token & admits the banks",
+      "plain": "The Regulator deploys a zero-knowledge Zeto token (no notary) and registers Bank A and Bank B in the on-chain KYC registry. An un-admitted party can't transact — its transfer proof would fail.",
+      "tech": "Zeto.newZeto({ tokenName:\"Zeto_AnonNullifierKyc\" }) → 0x83f96eda1d59a1d818b5970edaae36373bfc7993  ·  register(bankA), register(bankB)",
+      "badges": [
+        "perm",
+        "priv"
+      ]
+    },
+    {
+      "title": "Regulator issues 1,000 to Bank A",
+      "plain": "The Regulator mints the initial supply to Bank A. Only Bank A can decrypt the resulting note — not even the Regulator who issued it can read the amount.",
+      "tech": "zeto.mint({ to: bankA, amount: 1000 })  ·  ZK commitment on-chain",
+      "badges": [
+        "priv",
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "Zeto 1,000",
+          "tone": "priv",
+          "see": [
+            "bankA"
+          ],
+          "from": "regulator",
+          "to": "bankA"
+        }
+      ]
+    },
+    {
+      "title": "Bank A transfers 300 to Bank B",
+      "plain": "Bank A sends 300 to Bank B. The ZK proof shows both are KYC-registered and value is conserved — without revealing the amount or the parties. Only Bank A and Bank B see their own notes; the Regulator, other members and the public see only a nullifier + commitment.",
+      "tech": "zeto.transfer({ to: bankB, amount: 300 })  ·  nullifier + ZK commitment",
+      "badges": [
+        "priv",
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "Zeto 300",
+          "tone": "priv",
+          "see": [
+            "bankB"
+          ],
+          "from": "bankA",
+          "to": "bankB"
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "regulator",
+      "kind": "perm",
+      "title": "KYC registry (authority)",
+      "detail": "admits / blocks participants · cannot see amounts",
+      "from": 0
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Zeto KYC token",
+      "detail": "deployed at 0x83f96eda1d59a1d818b5970edaae36373bfc7993 · ZK, no notary",
+      "from": 0
+    },
+    {
+      "col": "bankA",
+      "kind": "perm",
+      "title": "KYC ✓ admitted",
+      "detail": "registered by the Regulator",
+      "from": 0
+    },
+    {
+      "col": "bankB",
+      "kind": "perm",
+      "title": "KYC ✓ admitted",
+      "detail": "registered by the Regulator",
+      "from": 0
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA"
+      ],
+      "title": "Zeto balance",
+      "detail": "1,000 · only Bank A can decrypt",
+      "from": 1,
+      "until": 2
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Mint recorded",
+      "detail": "ZK commitment · amount hidden",
+      "from": 1
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA"
+      ],
+      "title": "Zeto balance",
+      "detail": "700 · change note",
+      "from": 2
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Zeto balance",
+      "detail": "300 received",
+      "from": 2
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Transfer recorded",
+      "detail": "nullifier + ZK commitment · amount & parties hidden",
+      "from": 2
+    }
+  ]
+}

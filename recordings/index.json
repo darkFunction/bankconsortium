@@ -6,7 +6,12 @@
   },
   {
     "id": "noto-bond",
-    "name": "Noto Bond (CSD notary)",
-    "tagline": "Private bond — only the notary and counterparties see the amounts"
+    "name": "Noto Bond + Regulator",
+    "tagline": "Private bond — a Regulator oversees via a Pente group with the notary"
+  },
+  {
+    "id": "zeto-kyc",
+    "name": "Zeto + Regulator (KYC)",
+    "tagline": "ZK transfer — amounts hidden from all (even the Regulator), who gates by KYC"
   }
 ]

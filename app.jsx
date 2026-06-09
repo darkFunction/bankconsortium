@@ -75,6 +75,8 @@
   /* ---------- column ---------- */
   function Column({ colId, scn, parties, viewer, step, colRef }) {
     const party = parties[colId] || { name: colId, role: '', kind: 'inst' };
+    const groupDefs = scn.groups || {};
+    const myGroups = party.groups || [];
     // A column is "yours" when its id matches the viewer, or when its party
     // declares it represents this viewer (e.g. ledger ⇒ consortium, sepolia ⇒ public).
     const isYou = viewer === colId || party.viewer === viewer;
@@ -94,6 +96,14 @@
             {isYou && <span className="youtag">VIEWING</span>}
           </div>
           <div className="ch-role" style={{ color: isPub ? 'var(--public-ink)' : 'var(--muted)' }}>{party.role}</div>
+          {myGroups.length > 0 && (
+            <div className="ch-groups">
+              {myGroups.map(g => {
+                const gd = groupDefs[g] || {};
+                return <span key={g} className="gtag" title={'Member of ' + (gd.name || g)}><span className="ghex">⬡</span>{gd.short || gd.name || g}</span>;
+              })}
+            </div>
+          )}
         </div>
         <div className="col-body">
           {facts.length === 0
