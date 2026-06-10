@@ -1,0 +1,361 @@
+{
+  "id": "dvp",
+  "name": "Atomic DvP (bond ⇄ cash)",
+  "tagline": "Bond delivered against cash in one atomic swap — the Regulator audits delivery, but the payment stays private",
+  "concept": "A Delivery-versus-Payment that spans two privacy models in one trade. The bond is a Noto token (hooks mode): its notary (CSD) and the oversight group {CSD, Regulator} see every position. The cash is Zeto tokenised-deposit money: amounts are zero-knowledge, visible only to the owning bank. Both legs are locked and delegated to a single Atom contract, so they settle together or not at all. The result is a faithful asymmetry — the Regulator can audit the DELIVERY of the bond, yet is blind to the CONSIDERATION (the cash). 'Cash' is no one's column: each bank mints tokenised deposits to itself, and the payment is just a second, ZK-shielded movement between the same two banks.",
+  "columns": [
+    "csd",
+    "bankA",
+    "bankB",
+    "regulator",
+    "ledger",
+    "sepolia"
+  ],
+  "viewers": [
+    "csd",
+    "bankA",
+    "bankB",
+    "regulator",
+    "consortium",
+    "public"
+  ],
+  "groups": {
+    "oversight": {
+      "name": "Oversight (Pente)",
+      "short": "Oversight"
+    }
+  },
+  "parties": {
+    "csd": {
+      "name": "Central Securities Depository",
+      "role": "Bond notary · settlement agent",
+      "kind": "authority",
+      "groups": [
+        "oversight"
+      ]
+    },
+    "bankA": {
+      "name": "Bank A",
+      "role": "Bond seller · cash receiver",
+      "kind": "inst"
+    },
+    "bankB": {
+      "name": "Bank B",
+      "role": "Bond buyer · pays own deposits",
+      "kind": "inst"
+    },
+    "regulator": {
+      "name": "Regulator",
+      "role": "Oversight · Pente member",
+      "kind": "authority",
+      "groups": [
+        "oversight"
+      ]
+    },
+    "ledger": {
+      "name": "Consortium ledger",
+      "role": "Permissioned shared EVM",
+      "kind": "consortium",
+      "viewer": "consortium"
+    },
+    "sepolia": {
+      "name": "Ethereum Sepolia",
+      "role": "Public L1 network",
+      "kind": "public",
+      "viewer": "public"
+    },
+    "consortium": {
+      "name": "Consortium member",
+      "role": "On the chain · not a party to either leg",
+      "kind": "consortium"
+    }
+  },
+  "groupLabels": {
+    "primary": "Consortium parties",
+    "consortium": "Permissioned consortium ledger",
+    "public": "Public network"
+  },
+  "steps": [
+    {
+      "title": "Set up: bond (hooks) + Bank B's tokenised-deposit cash + Atom factory",
+      "plain": "The CSD forms a Pente oversight group with the Regulator and issues the bond as a Noto token whose policy runs in that group (hooks). Bank B mints its OWN tokenised-deposit cash (a Zeto, ZK) to itself. A shared Atom factory is deployed to settle trades atomically.",
+      "tech": "pente.newPrivacyGroup({members:[csd,regulator]}) · Noto.newNoto({notary:csd,notaryMode:\"hooks\"}) → 0xccd8978b135f933557618855dc0f4c2f6febe31f · Zeto.newZeto(\"Zeto_Anon\") → 0xb68f9761ec1ec9961e52eeea0dc6d33f24d57364",
+      "badges": [
+        "priv",
+        "perm"
+      ]
+    },
+    {
+      "title": "CSD issues 1,000 BOND to Bank A",
+      "plain": "The notary and Bank A see the bond coin; the onMint hook records it in the Pente tracker, so the Regulator sees the position too — without holding anything. Bank B already holds its 25,000 of tokenised-deposit cash, which only Bank B can value.",
+      "tech": "bond.mint({to:bankA, amount:1000}) · onMint → tracker._mint(bankA, 1000)",
+      "badges": [
+        "priv",
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "BOND 1,000",
+          "tone": "priv",
+          "see": [
+            "csd",
+            "bankA"
+          ],
+          "from": "csd",
+          "to": "bankA"
+        }
+      ]
+    },
+    {
+      "title": "Both legs locked & delegated to the Atom (escrow)",
+      "plain": "Bank A locks 400 BOND and prepares its unlock to Bank B; Bank B locks 10,000 cash and prepares its transfer to Bank A. Each leg is delegated to one Atom contract. Nothing has moved yet — but neither party can now pull out unilaterally.",
+      "tech": "bond.lock(400)+prepareUnlock(bankB) · cash.lock(10,000)+prepareTransferLocked(bankA) · atomFactory.create([bondUnlock, cashTransfer]) → 0xab2a7d973604d76288b5b62aa1f02e1d9d820fa6",
+      "badges": [
+        "priv",
+        "perm"
+      ]
+    },
+    {
+      "title": "Atomic settlement — bond ⇄ cash, all-or-nothing",
+      "plain": "One Atom.execute() runs both legs in a single base-ledger transaction: the bond unlocks to Bank B and the cash transfers to Bank A together. The CSD and Regulator see the bond change hands (via the oversight tracker); the cash amount stays ZK-hidden from them — they audit delivery, not the price.",
+      "tech": "atom.execute() → Noto.unlock(→bankB, 400) + Zeto.transferLocked(→bankA, 10,000), atomic",
+      "badges": [
+        "priv",
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "BOND 400",
+          "tone": "priv",
+          "see": [
+            "csd",
+            "bankA",
+            "bankB",
+            "regulator"
+          ],
+          "from": "bankA",
+          "to": "bankB"
+        },
+        {
+          "label": "Cash 10,000",
+          "tone": "priv",
+          "see": [
+            "bankA",
+            "bankB"
+          ],
+          "shielded": true,
+          "from": "bankB",
+          "to": "bankA"
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "csd",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "bankA",
+        "bankB",
+        "regulator"
+      ],
+      "title": "Bond notary = CSD",
+      "detail": "co-signs every bond leg · also the settlement agent",
+      "from": 0
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Noto BOND contract",
+      "detail": "deployed · notary is a Pente group 0xb86d08fa3cb7753482f9e7c8ce33be4ec55a3ce4 (members hidden)",
+      "from": 0
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Zeto deposit token",
+      "detail": "0xb68f9761ec1ec9961e52eeea0dc6d33f24d57364 · Bank B's tokenised deposit · ZK, no notary",
+      "from": 0
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Atom settlement factory",
+      "detail": "0xad50c57872652ebd5aa0e5d582049d59aa44c12f · binds multi-leg trades into one atomic tx",
+      "from": 0
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "regulator"
+      ],
+      "title": "Bond tracker (Pente)",
+      "detail": "private ERC-20 mirror · oversight group {CSD, Regulator}",
+      "from": 0
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Tokenised deposits",
+      "detail": "25,000 · minted to self · only Bank B can decrypt",
+      "from": 0,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "bankA"
+      ],
+      "title": "BOND holding",
+      "detail": "1,000 units",
+      "from": 1,
+      "until": 2
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Bond contract activity",
+      "detail": "opaque Pente-group tx · masked Transfer event (state hashes)",
+      "from": 1
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "regulator"
+      ],
+      "title": "Tracked positions",
+      "detail": "Bank A: 1,000",
+      "from": 1,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "bankA"
+      ],
+      "locked": true,
+      "title": "BOND escrowed",
+      "detail": "400 locked · unlock to Bank B delegated to the Atom",
+      "from": 2,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "bankA"
+      ],
+      "title": "BOND holding",
+      "detail": "600 free · 400 locked",
+      "from": 2,
+      "until": 3
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "locked": true,
+      "title": "Cash escrowed",
+      "detail": "10,000 locked · transfer to Bank A delegated to the Atom",
+      "from": 2,
+      "until": 3
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Atom created",
+      "detail": "both legs delegated · will execute all-or-nothing",
+      "from": 2
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "regulator"
+      ],
+      "locked": true,
+      "title": "Settlement pending",
+      "detail": "Bank A bond: 400 locked · cash leg not visible to oversight",
+      "from": 2,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "bankA"
+      ],
+      "title": "BOND holding",
+      "detail": "600 units · delivered 400",
+      "from": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Cash received",
+      "detail": "10,000 · payment for the bond · ZK-hidden from others",
+      "from": 3
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "bankA",
+        "bankB"
+      ],
+      "title": "BOND holding",
+      "detail": "400 units received",
+      "from": 3
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Tokenised deposits",
+      "detail": "15,000 · after paying 10,000",
+      "from": 3
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Atomic settlement executed",
+      "detail": "one base-ledger tx · bond unlock + cash transfer · amounts & legs masked",
+      "from": 3
+    },
+    {
+      "col": "regulator",
+      "kind": "priv",
+      "see": [
+        "csd",
+        "regulator"
+      ],
+      "title": "Tracked positions",
+      "detail": "Bank A: 600 · Bank B: 400 (bond) · cash consideration not visible",
+      "from": 3
+    }
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "id": "stablecoin",
+  "name": "Compliant Stablecoin (bridge-in)",
+  "tagline": "USDC bridged in, then paid privately bank-to-bank — the Issuer gates KYC but sees no amounts",
+  "concept": "A regulated stablecoin brought onto the consortium ledger and transacted privately. Real USDC is locked in a bridge vault on the public chain (a transparent, public event); against it the Issuer mints a 1:1 representation onto the permissioned ledger as a KYC-gated ZK token. From then on payments are zero-knowledge: only the owning bank can value its notes. The Issuer is the compliance anchor — it controls issuance/redemption and the KYC allowlist (so an un-admitted party simply can't transact) — yet it sees neither amounts nor who-pays-whom. That's compliance without surveillance: admission control at the edge, privacy in the middle. Other consortium members and the public see only ZK commitments and nullifiers.",
+  "columns": [
+    "issuer",
+    "bankA",
+    "bankB",
+    "ledger",
+    "sepolia"
+  ],
+  "viewers": [
+    "issuer",
+    "bankA",
+    "bankB",
+    "consortium",
+    "public"
+  ],
+  "groups": {
+    "kyc": {
+      "name": "KYC registry",
+      "short": "KYC ✓"
+    }
+  },
+  "parties": {
+    "issuer": {
+      "name": "Stablecoin Issuer",
+      "role": "Bridge mint · KYC authority · sees no amounts",
+      "kind": "authority"
+    },
+    "bankA": {
+      "name": "Bank A",
+      "role": "Holder · KYC-admitted",
+      "kind": "inst",
+      "groups": [
+        "kyc"
+      ]
+    },
+    "bankB": {
+      "name": "Bank B",
+      "role": "Holder · KYC-admitted",
+      "kind": "inst",
+      "groups": [
+        "kyc"
+      ]
+    },
+    "ledger": {
+      "name": "Consortium ledger",
+      "role": "Permissioned shared EVM",
+      "kind": "consortium",
+      "viewer": "consortium"
+    },
+    "sepolia": {
+      "name": "Ethereum (public)",
+      "role": "Where the real USDC is locked",
+      "kind": "public",
+      "viewer": "public"
+    },
+    "consortium": {
+      "name": "Consortium member",
+      "role": "On the chain · not a stablecoin party",
+      "kind": "consortium"
+    }
+  },
+  "groupLabels": {
+    "primary": "Issuer & banks",
+    "consortium": "Permissioned consortium ledger",
+    "public": "Public network"
+  },
+  "steps": [
+    {
+      "title": "Bridge in: lock public USDC, Issuer onboards the banks",
+      "plain": "Real USDC is locked in a bridge vault on the public chain — a transparent, public event. On the consortium ledger the Issuer deploys a KYC-gated ZK stablecoin and admits Bank A and Bank B. An un-admitted party can't transact: its transfer proof would fail.",
+      "tech": "[public] bridge.lock(USDC, 1000000)  ·  [consortium] Zeto.newZeto(\"Zeto_AnonNullifierKyc\") → 0x4835624911648af058df40ed0ea263a1854967b5  ·  register(bankA), register(bankB)",
+      "badges": [
+        "pub",
+        "perm",
+        "priv"
+      ]
+    },
+    {
+      "title": "Bridge mint: Issuer mints 1,000,000 to Bank A",
+      "plain": "Against the locked USDC, the Issuer mints the representation 1:1 to Bank A. The Issuer sees the issuance it performs (the edge) — but from here the value is a ZK note only Bank A can decrypt: the Issuer cannot read Bank A's balance, nor any payment Bank A later makes (the middle).",
+      "tech": "coin.mint({ to: bankA, amount: 1000000 })  ·  ZK commitment on-chain",
+      "badges": [
+        "priv",
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "USDC 1,000,000",
+          "tone": "priv",
+          "see": [
+            "issuer",
+            "bankA"
+          ],
+          "from": "issuer",
+          "to": "bankA"
+        }
+      ]
+    },
+    {
+      "title": "Private payment: Bank A pays 250,000 to Bank B",
+      "plain": "Bank A pays Bank B. The ZK proof shows both are KYC-registered and value is conserved — without revealing the amount or the parties. Only Bank A and Bank B see their own notes; the Issuer, other members and the public see only a nullifier + commitment.",
+      "tech": "coin.transfer({ to: bankB, amount: 250000 })  ·  nullifier + ZK commitment",
+      "badges": [
+        "priv",
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "USDC 250,000",
+          "tone": "priv",
+          "see": [
+            "bankA",
+            "bankB"
+          ],
+          "shielded": true,
+          "from": "bankA",
+          "to": "bankB"
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "sepolia",
+      "kind": "pub",
+      "title": "USDC locked in bridge vault",
+      "detail": "1,000,000 USDC escrowed on the public chain · backs the on-ledger representation",
+      "from": 0
+    },
+    {
+      "col": "issuer",
+      "kind": "perm",
+      "title": "Bridge & KYC authority",
+      "detail": "mints against locked reserves · admits/blocks holders · sees no transfer amounts",
+      "from": 0
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Stablecoin contract",
+      "detail": "0x4835624911648af058df40ed0ea263a1854967b5 · Zeto_AnonNullifierKyc · ZK, no notary",
+      "from": 0
+    },
+    {
+      "col": "bankA",
+      "kind": "perm",
+      "title": "KYC ✓ admitted",
+      "detail": "registered by the Issuer",
+      "from": 0
+    },
+    {
+      "col": "bankB",
+      "kind": "perm",
+      "title": "KYC ✓ admitted",
+      "detail": "registered by the Issuer",
+      "from": 0
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA"
+      ],
+      "title": "Stablecoin balance",
+      "detail": "1,000,000 · only Bank A can decrypt",
+      "from": 1,
+      "until": 2
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Bridge mint recorded",
+      "detail": "ZK commitment · amount hidden",
+      "from": 1
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA"
+      ],
+      "title": "Stablecoin balance",
+      "detail": "750,000 · change note",
+      "from": 2
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Stablecoin balance",
+      "detail": "250,000 received",
+      "from": 2
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Payment recorded",
+      "detail": "nullifier + ZK commitment · amount & parties hidden",
+      "from": 2
+    }
+  ]
+}

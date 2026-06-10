@@ -13,5 +13,15 @@
     "id": "zeto-kyc",
     "name": "Zeto + Regulator (KYC)",
     "tagline": "ZK transfer — amounts hidden from all (even the Regulator), who gates by KYC"
+  },
+  {
+    "id": "stablecoin",
+    "name": "Compliant Stablecoin (bridge-in)",
+    "tagline": "USDC bridged in, then paid privately bank-to-bank — the Issuer gates KYC but sees no amounts"
+  },
+  {
+    "id": "dvp",
+    "name": "Atomic DvP (bond ⇄ cash)",
+    "tagline": "Bond delivered against cash in one atomic swap — the Regulator audits delivery, the payment stays private"
   }
 ]
