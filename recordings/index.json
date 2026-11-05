@@ -23,5 +23,10 @@
     "id": "dvp",
     "name": "Atomic DvP (bond ⇄ cash)",
     "tagline": "Bond delivered against cash in one atomic swap — the Regulator audits delivery, the payment stays private"
+  },
+  {
+    "id": "private-payment",
+    "name": "Private payment + side effect (2 rounds)",
+    "tagline": "Bank B pays Bank A in its own ZK deposits and receives a bond — atomic, one settlement tx, no Atom, no shared lane"
   }
 ]

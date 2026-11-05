@@ -1,0 +1,304 @@
+{
+  "id": "private-payment",
+  "name": "Private payment + side effect (2 rounds)",
+  "tagline": "Bank B pays Bank A in its own ZK deposits and receives a bond — atomic, one settlement tx, no Atom, no shared lane",
+  "concept": "The minimal private 'pay + side effect' pattern. Cash is Bank B's own tokenised deposit as a Zeto (ZK) token: amounts are hidden from everyone but the two banks. The side effect — here a bond position — lives in a private contract inside a BILATERAL Pente group that only Bank A and Bank B are members of. Bank B locks the cash with the group itself as the delegate, so the group's single settle() transaction can move the bond AND release the cash as one base-ledger transaction (a Pente external call): all-or-nothing, without deploying an Atom and without any shared group that other bank pairs queue behind. Each bank pair is its own lane — which is what lets this scale with the number of banks, until the shared chain's execution rate becomes the limit.",
+  "columns": [
+    "bankA",
+    "bankB",
+    "bankC",
+    "ledger"
+  ],
+  "viewers": [
+    "bankA",
+    "bankB",
+    "bankC",
+    "public"
+  ],
+  "groups": {
+    "pair": {
+      "name": "Bilateral group A⇄B (Pente)",
+      "short": "A⇄B group"
+    }
+  },
+  "parties": {
+    "bankA": {
+      "name": "Bank A",
+      "role": "Seller · receives cash",
+      "kind": "inst",
+      "groups": [
+        "pair"
+      ]
+    },
+    "bankB": {
+      "name": "Bank B",
+      "role": "Buyer · pays own deposits",
+      "kind": "inst",
+      "groups": [
+        "pair"
+      ]
+    },
+    "bankC": {
+      "name": "Bank C",
+      "role": "Consortium member · not a party",
+      "kind": "inst"
+    },
+    "ledger": {
+      "name": "Consortium ledger",
+      "role": "Permissioned shared EVM",
+      "kind": "consortium"
+    },
+    "public": {
+      "name": "Public / outsider",
+      "role": "No node on the chain",
+      "kind": "public"
+    }
+  },
+  "groupLabels": {
+    "primary": "Consortium banks",
+    "consortium": "Permissioned consortium ledger"
+  },
+  "steps": [
+    {
+      "title": "Set up: Bank B's deposit token + a bilateral A⇄B group",
+      "plain": "Bank B issues its own tokenised deposits as a Zeto (ZK) token and mints 25,000 to itself. Bank A and Bank B form a two-member Pente privacy group and deploy a small settlement contract in it that holds Bank A's 1,000 bond units. Bank C runs a node on the same chain but is in neither.",
+      "tech": "Zeto(\"Zeto_Anon\") → 0x0145bfe9209ab20eb5cf72c0c69d2b47816c1838 · pente.newPrivacyGroup({members:[bankA,bankB], externalCallsEnabled:true}) → 0x3066ac0f0d3bf81bb28449b9ebe1b760c7e58298 · PrivateSettlement(seller=A, buyer=B)",
+      "badges": [
+        "priv",
+        "perm"
+      ]
+    },
+    {
+      "title": "Round 1 (in parallel): Bank B escrows the cash to the group and bids",
+      "plain": "Bank B locks 10,000 of its deposits with the GROUP as the only party allowed to release them, and — in the same round — records inside the group that it is buying 400 units under this trade id. Two base-ledger transactions, sent in parallel; the chain sees a Zeto lock and an opaque group transition, no amounts.",
+      "tech": "cash.lock(10,000, delegate=group) · 0.6 s · 346k gas   ‖   group.bid(tradeId, 400) · 0.6 s · 144k gas",
+      "badges": [
+        "priv",
+        "perm"
+      ]
+    },
+    {
+      "title": "Bank B prepares the payment (ZK proof, nothing on chain)",
+      "plain": "Bank B's node builds the zero-knowledge proof for 'pay the locked 10,000 to Bank A' as a prepared transaction — not submitted. It hands the encoded call to Bank A, who can check the output it would receive before agreeing (that check is off-chain and not modelled here).",
+      "tech": "cash.prepareTransferLocked(lockedInputs, delegate=group, →bankA 10,000) · 0.2 s · 0 gas",
+      "badges": [
+        "priv"
+      ]
+    },
+    {
+      "title": "Bank A settles — bond and cash move in ONE transaction",
+      "plain": "Bank A calls settle() inside the group: the contract checks Bank B's bid, moves 400 bond units from A to B in the private register, and emits the prepared cash transfer as a Pente external call. Pente executes it in the same base-ledger transaction as the group's state change — if the cash leg failed, the bond move would revert too. Only A and B can see either leg; Bank C sees an opaque transaction.",
+      "tech": "group.settle(tradeId, 400, cash, transferLocked) → Zeto.transferLocked(→bankA) in-tx · 0.8 s · 457k gas · one tx: true",
+      "badges": [
+        "priv",
+        "perm"
+      ],
+      "motion": [
+        {
+          "label": "BOND 400",
+          "tone": "priv",
+          "see": [
+            "bankA",
+            "bankB"
+          ],
+          "from": "bankA",
+          "to": "bankB"
+        },
+        {
+          "label": "Cash 10,000",
+          "tone": "priv",
+          "see": [
+            "bankA",
+            "bankB"
+          ],
+          "shielded": true,
+          "from": "bankB",
+          "to": "bankA"
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Tokenised deposits",
+      "detail": "25,000 · own liability · ZK, only Bank B can value",
+      "from": 0,
+      "until": 1
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Bond position (group register)",
+      "detail": "1,000 units",
+      "from": 0,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Bilateral group A⇄B",
+      "detail": "Pente · members: Bank A, Bank B",
+      "from": 0
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Bilateral group A⇄B",
+      "detail": "Pente · members: Bank A, Bank B",
+      "from": 0
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Zeto deposit token",
+      "detail": "0x0145bfe9209ab20eb5cf72c0c69d2b47816c1838 · Bank B's deposits · amounts ZK-hidden",
+      "from": 0
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Privacy group contract",
+      "detail": "0x3066ac0f0d3bf81bb28449b9ebe1b760c7e58298 · state hashes only, members hidden",
+      "from": 0
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Tokenised deposits",
+      "detail": "15,000 spendable",
+      "from": 1,
+      "until": 3
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "locked": true,
+      "title": "Cash escrowed to the group",
+      "detail": "10,000 locked · only the A⇄B group can release it",
+      "from": 1,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Bid recorded (group)",
+      "detail": "Bank B buys 400 units · trade 0x2ccce207…",
+      "from": 1,
+      "until": 3
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Zeto lock",
+      "detail": "a note was locked to a delegate · amount hidden",
+      "from": 1
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Group transition",
+      "detail": "opaque state-hash update (the bid)",
+      "from": 1
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Prepared payment",
+      "detail": "ZK proof: locked 10,000 → Bank A · not submitted",
+      "from": 2,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Incoming payment (prepared)",
+      "detail": "10,000 from Bank B · awaiting settle",
+      "from": 2,
+      "until": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Bond position (group register)",
+      "detail": "600 units · delivered 400",
+      "from": 3
+    },
+    {
+      "col": "bankA",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Cash received",
+      "detail": "10,000 Bank B deposits · ZK",
+      "from": 3
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankA",
+        "bankB"
+      ],
+      "title": "Bond position (group register)",
+      "detail": "400 units received",
+      "from": 3
+    },
+    {
+      "col": "bankB",
+      "kind": "priv",
+      "see": [
+        "bankB"
+      ],
+      "title": "Tokenised deposits",
+      "detail": "15,000 · after paying 10,000",
+      "from": 3
+    },
+    {
+      "col": "ledger",
+      "kind": "perm",
+      "title": "Settlement transaction",
+      "detail": "ONE tx: group transition + Zeto transferLocked · amounts & bond hidden",
+      "from": 3
+    }
+  ]
+}

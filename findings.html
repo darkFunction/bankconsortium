@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Paladin Concept Demo · Throughput findings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="report.css" />
+</head>
+<body>
+<div class="hdr">
+  <a class="brand" href="index.html"><span class="logo"></span><span class="bname">Paladin</span><span class="bsub">Bank consortium PoC</span></a>
+  <div class="spacer"></div>
+  <nav class="sitenav">
+    <a href="index.html">Home</a>
+    <a href="paladin-demo.html">Replay demo</a>
+    <a href="findings.html" class="on">Throughput findings</a>
+    <a href="rayls-nightfall.html">Rayls &amp; Nightfall</a>
+    <a href="design.html">Recommended design</a>
+  </nav>
+</div>
+
+<div class="layout">
+  <nav class="toc">
+    <div class="tl">On this page</div>
+    <a href="#answer">The short answer</a>
+    <a href="#setup">What was tested</a>
+    <a href="#dvp">The maximalist DvP</a>
+    <a href="#blocks">Building blocks</a>
+    <a href="#design">Recommended design</a>
+    <a href="#chain">One chain, saturated</a>
+    <a href="#scale">20 banks and better hardware</a>
+    <a href="#target">What 2,000/s would take</a>
+    <a href="#latency">Latency</a>
+    <a href="#caveats">Caveats</a>
+    <a href="#files">Where the data lives</a>
+  </nav>
+
+  <main>
+    <div class="kicker">Stress test · measured 4 November 2026</div>
+    <h1>How much private interbank payment traffic can Paladin and Besu carry?</h1>
+    <p class="lede">The use case: one bank pays another in private cash tokens, with a private side effect such as a bond
+      transfer, and no batching of payments. The DvP tab in this demo is the maximalist version, with a regulator on
+      the critical path. This page records what we measured, and what that implies for a network of about 20 banks.</p>
+    <div class="meta">Paladin v0.15.0 and Besu 25.8.0 (QBFT) on one 16-core / 30 GiB laptop. Tags: <span class="tag m">measured</span> observed in these runs;
+      <span class="tag e">estimate</span> derived from measured costs plus a stated assumption.</div>
+
+    <!-- ===================================================== -->
+    <section id="answer">
+      <h2>The short answer</h2>
+      <div class="verdicts">
+        <div class="vcard">
+          <h3>Is Besu capable of a national payments network?</h3>
+          <div class="vrow"><span class="pill yes">Yes</span><span><strong>Wholesale interbank settlement</strong> (RTGS-style volumes of a few to ~10 payments/s): one chain carried about 90–115 private payments/s.</span></div>
+          <div class="vrow"><span class="pill no">No</span><span><strong>Retail instant payments</strong> (hundreds to thousands per second): one chain tops out at a fixed ~100–115 Mgas/s, so this needs many chains.</span></div>
+        </div>
+        <div class="vcard">
+          <h3>Is Paladin capable of a national payments network?</h3>
+          <div class="vrow"><span class="pill notyet">Not yet</span><span>Wholesale <strong>volume</strong> is within reach: ~7 payments/s at 32 bank pairs, and it scales with banks.</span></div>
+          <div class="vrow"><span class="pill no">Blocker</span><span><strong>Maturity:</strong> v0.15 failed 3.5% of payments and retries didn't fix them, and Zeto proves one payment at a time per bank per token. Those are product problems, not limits of the design.</span></div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="v">0.7<small> /s</small></div><div class="l">maximalist DvP peak, then collapse <span class="tag m">measured</span></div></div>
+        <div class="stat"><div class="v">2.2<small> s</small></div><div class="l">private payment + side effect, p50 latency <span class="tag m">measured</span></div></div>
+        <div class="stat"><div class="v">~114<small> /s</small></div><div class="l">those payments one Besu chain can absorb (1 validator) <span class="tag m">measured</span></div></div>
+        <div class="stat"><div class="v">~17×</div><div class="l">more chain capacity needed for 2,000 such payments/s <span class="tag e">estimate</span></div></div>
+      </div>
+
+      <h3>For scale: national payment volumes</h3>
+      <p>These are approximate public figures, quoted from memory rather than checked; they are context, not measurements. Averages are over the operating day, and peaks are several times higher.</p>
+      <div class="tablewrap"><table>
+        <tr><th>System</th><th>Type</th><th class="n">Rough volume</th><th class="n">Average rate</th><th>Fits on one Besu chain here?</th></tr>
+        <tr><td>CHAPS (UK)</td><td>Wholesale RTGS</td><td class="n">~200k / day</td><td class="n">~3 /s</td><td>Yes, with large headroom</td></tr>
+        <tr><td>Fedwire Funds (US)</td><td>Wholesale RTGS</td><td class="n">~800k / day</td><td class="n">~10 /s</td><td>Yes</td></tr>
+        <tr><td>Faster Payments (UK)</td><td>Retail instant</td><td class="n">~4–5bn / year</td><td class="n">~150 /s</td><td>No: above one chain even on average</td></tr>
+        <tr><td>UPI (India)</td><td>Retail instant</td><td class="n">~15–20bn / month</td><td class="n">~7,000 /s</td><td>No: ~60× one chain</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="setup">
+      <h2>What was tested</h2>
+      <ul>
+        <li><strong>The Paladin cluster behind this demo:</strong> 4 Paladin nodes and 4 Besu QBFT validators in kind, 700M gas limit, blocks effectively every ~1 s (see <a href="#latency">Latency</a>).</li>
+        <li><strong>Closed-loop concurrency sweeps</strong> of the DvP, of each building block (Noto, Zeto, Pente), and of the recommended payment design. Each measured steady-state throughput, latency percentiles, gas, and per-container CPU.</li>
+        <li><strong>A separate saturation test of the chain alone:</strong> a throwaway Besu network flooded with synthetic transactions matched on gas and cryptographic work, because a laptop's Paladin nodes can't generate enough load to find the chain's limit.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="dvp">
+      <h2>The maximalist DvP peaks at 0.7 trades/s</h2>
+      <p>The DvP needs 8 base-ledger transactions and 2.76M gas per trade, with an Atom contract deployed per trade. It peaked at
+        <strong>0.7 DvP/s with 4–6 trades in flight</strong>; beyond that latency went from 5.5 s to 18.5 s and throughput fell. <span class="tag m">measured</span></p>
+      <p>Hardware isn't the limit: the whole cluster used about 2 of 16 cores at the peak. The limit is the <strong>single shared
+        oversight Pente group</strong> that every bond operation passes through, together with its coordinating node's Postgres.
+        Concurrent transactions race for that group's state, and beyond about 8 in flight its coordinator thrashes.</p>
+      <div class="callout info"><span class="ct">Lesson</span>Keep shared groups, such as a regulator's oversight group, off the critical path of each payment. Give oversight asynchronously, or through per-pair groups.</div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="blocks">
+      <h2>What each building block costs</h2>
+      <p>1 s blocks; each "pair" is an independent pair of bank sub-accounts. <span class="tag m">measured</span></p>
+      <div class="tablewrap"><table>
+        <tr><th>Building block</th><th class="n">Gas</th><th class="n">Latency p50</th><th class="n">ops/s at 8 / 16 / 32 pairs</th><th class="n">Node CPU / op</th><th>What limits it</th></tr>
+        <tr><td><strong>Noto transfer</strong> (notary = issuing bank)</td><td class="n">117k</td><td class="n">1.0 s</td><td class="n">7.3 / 14.6 / 16.7</td><td class="n">~22 ms</td><td>One node's Postgres (an untuned sidecar)</td></tr>
+        <tr><td><strong>Zeto transfer</strong> (zero-knowledge)</td><td class="n">322k</td><td class="n">1.0 → 2.0 s</td><td class="n">7.2 / 12.0 / 14.3</td><td class="n">~310 ms</td><td>~7 proofs/s per node per token: proving appears serial</td></tr>
+        <tr><td><strong>Pente call</strong>, one group per pair</td><td class="n">146k</td><td class="n">1.0–1.2 s</td><td class="n">6.4 / 13.5 / 25.5</td><td class="n">~55–80 ms</td><td>Scales linearly, the best primitive</td></tr>
+        <tr><td><strong>Pente call</strong>, one shared group</td><td class="n">146k</td><td class="n">1.2 → 6.3 s</td><td class="n">6.9 / 9.7 / 3.2</td><td class="n">~50–90 ms</td><td>Peaks at ~10/s, then collapses</td></tr>
+        <tr class="dim"><td>Maximalist DvP (hooks + Atom)</td><td class="n">2.76M</td><td class="n">5.5 → 18.5 s</td><td class="n">peak 0.7</td><td class="n">~2.2 s</td><td>Shared oversight group</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="design">
+      <h2>Recommended design: private payment with an atomic side effect</h2>
+      <p>This is the smallest transaction graph that keeps the cash leg and the side effect atomic without a shared lane: no
+        Atom deployment, and each bank pair only ever contends with itself. It is built and shown in the
+        <a href="paladin-demo.html">“Private payment + side effect (2 rounds)”</a> tab.</p>
+<pre class="flow">round 1 (parallel):  Bank B: Zeto lock(amount, delegate = the A⇄B Pente group)   base tx  346k gas
+                     Bank B: group.bid(tradeId, units)                          base tx  146k gas
+then:                Bank B: prepare the locked transfer to Bank A (ZK proof, off-chain, ~0.2 s)
+round 2:             Bank A: group.settle(tradeId, units, cash transfer)        base tx  457k gas
+                       └─ bond A→B in the private register + Zeto.transferLocked,
+                          in ONE base-ledger transaction</pre>
+      <p>Only Bank A and Bank B can read the bond register or value the cash. Bank C, a consortium member with a node on the same chain, is denied the group and sees every balance as 0.</p>
+
+      <div class="tablewrap"><table>
+        <tr><th class="n">Bank pairs</th><th class="n">Settled</th><th class="n">Payments/s</th><th class="n">p50 / p90 latency</th><th class="n">Gas / payment</th><th class="n">Node CPU / payment</th></tr>
+        <tr><td class="n">1</td><td class="n">9 / 10</td><td class="n">0.37</td><td class="n">2.2 / 2.4 s</td><td class="n">949k</td><td class="n">~0.85 s</td></tr>
+        <tr><td class="n">4</td><td class="n">39 / 40</td><td class="n">1.59</td><td class="n">2.2 / 2.2 s</td><td class="n">949k</td><td class="n">~0.75 s</td></tr>
+        <tr><td class="n">8</td><td class="n">78 / 80</td><td class="n">2.96</td><td class="n">2.2 / 2.4 s</td><td class="n">949k</td><td class="n">~0.74 s</td></tr>
+        <tr><td class="n">16</td><td class="n">154 / 160</td><td class="n">5.76</td><td class="n">2.6 / 2.9 s</td><td class="n">949k</td><td class="n">~0.76 s</td></tr>
+        <tr class="hl"><td class="n">32</td><td class="n">298 / 310</td><td class="n">6.99</td><td class="n">4.1 / 5.1 s</td><td class="n">949k</td><td class="n">~0.78 s</td></tr>
+      </table></div>
+      <ul>
+        <li><strong>Knee:</strong> about <strong>3.5 payments/s per paying bank per cash token</strong>. Each payment needs 2 proofs, and each bank proves about 7/s per token. More banks, or more token contracts per bank, add lanes. <span class="tag m">measured</span></li>
+        <li><strong>Without the bid</strong> (the buyer trusts the seller on quantity): 2 base transactions, ~803k gas, same latency.</li>
+      </ul>
+      <div class="callout warn"><span class="ct">Before production</span>
+        3.5% of payments (22 of 620) failed on Paladin v0.15 state races, and retries never rescued one. A failed payment leaves the buyer's
+        cash locked to the group because this proof-of-concept contract has no refund path. The seller also needs an off-chain check of the
+        prepared cash before calling <code>settle</code>; the contract can't make it because amounts are hidden from it too.</div>
+      <p>If the cash issuer may see interbank flows, the same design with <strong>Noto</strong> (own-liability deposits) instead of Zeto removes proving entirely, at the cost of the issuer seeing amounts.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="chain">
+      <h2>One chain, saturated: a fixed ~100–115 Mgas/s</h2>
+      <p>A throwaway Besu 25.8 network, the same version as the cluster, was flooded with pre-signed synthetic transactions doing the same
+        expensive on-chain work as the real ones: BN254 pairing checks for Zeto, signature recovery for Noto and Pente, and fresh storage writes.
+        One “payment” is 2 Zeto-like plus 2 Pente-like transactions, which is the recommended design's chain work. <span class="tag m">measured</span></p>
+      <div class="tablewrap"><table>
+        <tr><th>Configuration</th><th class="n">Zeto-like tx/s</th><th class="n">Noto-like tx/s</th><th class="n">Pente-like tx/s</th><th class="n">Payments/s</th><th class="n">Mgas/s</th></tr>
+        <tr class="hl"><td>1 validator, 1 s blocks</td><td class="n">317</td><td class="n">935</td><td class="n">799</td><td class="n"><strong>114</strong></td><td class="n">111–116</td></tr>
+        <tr><td>1 validator, parallel execution on</td><td class="n">315</td><td class="n">945</td><td class="n">—</td><td class="n">114</td><td class="n">111–113</td></tr>
+        <tr class="hl"><td>4 validators (same host)</td><td class="n">259</td><td class="n">600</td><td class="n">—</td><td class="n"><strong>90</strong></td><td class="n">71–91</td></tr>
+        <tr><td>4 validators, parallel execution on</td><td class="n">257</td><td class="n">557</td><td class="n">—</td><td class="n">83</td><td class="n">66–90</td></tr>
+        <tr><td>1 validator: full build window / 2 s / 500 ms / 250 ms blocks</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">98 / 99 / 103 / 114</td><td class="n">98–113</td></tr>
+      </table></div>
+      <ul>
+        <li><strong>Capacity is a gas rate,</strong> the same for every transaction type and configuration. Besu executes at about 300 Mgas/s while building a block, but building, importing and persisting stretch each saturated block cycle to about 1.8 s.</li>
+        <li><strong>Parallel execution gave nothing,</strong> even though every transaction wrote separate storage, which is its best case.</li>
+        <li><strong>4 validators cost 20–35%.</strong> On one laptop that's partly CPU contention between them; dedicated machines should lose less.</li>
+        <li>Gas limit isn't the constraint: 700M gas per block would allow ~820 payments/s, but execution time binds first.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="scale">
+      <h2>Scaling to 20 banks, and better hardware</h2>
+      <p>Network throughput is the smallest of three limits: the sum of every bank's send capacity, the capacity of each bank pair's lane, and the
+        shared chain's execution rate. The first two grow as banks join. The third is fixed, because every node re-executes every transaction. <span class="tag e">estimate</span></p>
+      <div class="tablewrap"><table>
+        <tr><th>Limit</th><th>Recommended design, Zeto cash</th><th>How it scales</th></tr>
+        <tr><td>Per bank</td><td>~3.5 payments/s per cash token; ~20/s with tokens sharded across 16 cores</td><td>Linearly with banks and cores</td></tr>
+        <tr><td>20 banks combined</td><td>~70/s with one token each → ~400/s sharded</td><td>Linearly</td></tr>
+        <tr><td>Per bank pair</td><td>≤ ~10/s, keeping ≤ ~8 in flight</td><td>Only binds on hot pairs</td></tr>
+        <tr class="hl"><td><strong>The shared chain</strong></td><td><strong>~90–115/s measured on this laptop</strong>; perhaps 1.5–2× on fast servers</td><td><strong>Fixed:</strong> doesn't grow with banks</td></tr>
+      </table></div>
+      <ul>
+        <li><strong>Twenty banks aren't 5× faster than four.</strong> They add private capacity, but the shared chain becomes the limit.</li>
+        <li><strong>More validators don't add capacity.</strong> Keep 4–7 validators and run the other banks' Besu nodes as followers; every follower still has to keep up with block import.</li>
+        <li><strong>Better hardware</strong> raises bank-side capacity almost linearly, but the chain only by single-thread speed: about 1.5–2× from a laptop to a fast server.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="target">
+      <h2>What 2,000 private payments/s would take</h2>
+      <p>The chain's cost is gas, so the requirement converts directly. <span class="tag e">estimate</span></p>
+      <div class="tablewrap"><table>
+        <tr><th>Payment design</th><th class="n">Gas / payment</th><th class="n">Gas/s for 2,000/s</th><th class="n">× this laptop's chain</th><th class="n">Proving cores (all banks)</th></tr>
+        <tr class="hl"><td>Zeto + atomic side effect (built)</td><td class="n">0.95M</td><td class="n">1.9 Ggas/s</td><td class="n"><strong>~17×</strong></td><td class="n">~1,500</td></tr>
+        <tr><td>Noto own-liability + atomic side effect</td><td class="n">~0.5M</td><td class="n">~1.0 Ggas/s</td><td class="n">~9×</td><td class="n">negligible</td></tr>
+        <tr><td>Plain Zeto transfer, side effect separate</td><td class="n">0.32M</td><td class="n">0.64 Ggas/s</td><td class="n">~6×</td><td class="n">~600</td></tr>
+        <tr><td>Plain Noto transfer</td><td class="n">0.12M</td><td class="n">0.24 Ggas/s</td><td class="n"><strong>~2×</strong></td><td class="n">negligible</td></tr>
+      </table></div>
+      <ul>
+        <li><strong>On one chain,</strong> only plain Noto transfers come close, and only if server CPUs deliver the remaining ~2×. That's plausible but unmeasured.</li>
+        <li><strong>Otherwise it takes several chains:</strong> roughly 10–18 for the Zeto design, or 5–9 with Noto own-liability. Banks are partitioned by currency, region or business line, and atomic settlement only works within a chain.</li>
+        <li><strong>Zeto has a second wall:</strong> about 1,500 cores of proving across the network, roughly 75 per bank with 20 banks. Noto own-liability removes it, so whether issuers may see interbank flows is the decision that matters most.</li>
+        <li><strong>Proof-level batching</strong> (one proof and transaction covering several outputs from the same payer) is the only lever that cuts both walls. It's untested, and settlement batching is ruled out for this use case.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="latency">
+      <h2>Latency: the 1 s per step is a configuration artefact</h2>
+      <p>Besu does apply the cluster's 100 ms block period. But the genesis also sets a 10 s empty-block period
+        (<code>xemptyblockperiodseconds</code>). Whenever the transaction pool is momentarily empty, which Paladin's request-then-wait traffic
+        causes all the time, Besu falls back to checking once a second, so each step waits up to ~1.1 s. The saturation network reproduced that
+        cadence exactly; without the empty-block period, transactions were included in about 0.3 s. <span class="tag m">measured</span></p>
+      <p>That would cut the recommended payment from 2.2 s to well under a second. It doesn't change throughput, and it needs a genesis change on every node, which hasn't been made to the demo cluster.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="caveats">
+      <h2>Caveats</h2>
+      <ul>
+        <li><strong>One laptop.</strong> All nodes shared one machine and an untuned sidecar Postgres per node. Node-side numbers are floors; re-run the chain test on the hardware you would deploy.</li>
+        <li><strong>Synthetic chain load.</strong> The saturation transactions match the real ones on gas and cryptographic work but aren't the real contracts. Real transactions can't be replayed at volume, because each spends unique states.</li>
+        <li><strong>Short runs</strong> of roughly 10–60 s per level. Sustained runs haven't been done, so “sustainable” isn't established.</li>
+        <li><strong>Paladin v0.15 races</strong> needed client retries at moderate concurrency; reliability under load is itself a finding. A newer Paladin may behave differently, untested.</li>
+        <li><strong>Serial Zeto proving</strong> per node and token is an inference from the measurements, not verified in Paladin's code.</li>
+        <li><strong>The recommended design is a proof of concept:</strong> no refund path, no seller-side check of the prepared cash, and a toy bond register.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="files">
+      <h2>Where the data lives</h2>
+      <ul>
+        <li><code>benchmarks/FINDINGS.md</code>: the full write-up this page summarises.</li>
+        <li><code>benchmarks/results/</code>: raw sweep results (Markdown and JSON) and <code>chain-saturation.jsonl</code>.</li>
+        <li><code>benchmarks/chain-saturation/</code>: the self-contained saturation test (needs only Docker and Node.js).</li>
+        <li><code>RUNBOOK.md</code>: how to bring the cluster up, record new use cases and re-run the benchmarks.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+</body>
+</html>

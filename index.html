@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Paladin Concept Demo · Bank consortium PoC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="report.css" />
+</head>
+<body>
+<div class="hdr">
+  <a class="brand" href="index.html"><span class="logo"></span><span class="bname">Paladin</span><span class="bsub">Bank consortium PoC</span></a>
+  <div class="spacer"></div>
+  <nav class="sitenav">
+    <a href="index.html" class="on">Home</a>
+    <a href="paladin-demo.html">Replay demo</a>
+    <a href="findings.html">Throughput findings</a>
+    <a href="rayls-nightfall.html">Rayls &amp; Nightfall</a>
+    <a href="design.html">Recommended design</a>
+  </nav>
+</div>
+
+<div class="hero">
+  <div class="kicker">Proof of concept · Paladin v0.15 on Besu</div>
+  <h1>Private interbank payments on a shared ledger</h1>
+  <p class="lede">Can a consortium of banks pay each other privately, with programmable side effects such as a bond delivery, on a shared
+    EVM ledger, and how far does that scale? This site replays real recordings from a 4-node Paladin network, then documents what
+    stress tests found about throughput, and how Rayls and Nightfall_4 compare.</p>
+</div>
+
+<div class="home">
+  <div class="cards">
+
+    <div class="card wide">
+      <div class="kicker">Interactive</div>
+      <h2>Replay demo: who sees what</h2>
+      <p>Step through each use case as any participant (bank, regulator, consortium member or the public) and watch what each party's node
+        can and can't see. Every step replays a real transaction captured from the network.</p>
+      <div class="uclist" id="usecases">
+        <a class="uc" href="paladin-demo.html"><div class="n">Open the demo</div><div class="t">Loading the list of use cases…</div></a>
+      </div>
+    </div>
+
+    <div class="card wide">
+      <div class="kicker">Recommended design</div>
+      <h2>Private Solidity for interbank payments at retail volume</h2>
+      <p>Keep this PoC's programming model: Solidity running privately among the banks involved, plus zero-knowledge cash. Change the shared
+        ledger so it checks proofs on every core before ordering payments, under a fast DAG-based consensus. Each payment settles individually
+        and is final in about a second, with no settlement batching and no L2. The page walks through one payment end to end, explains how the
+        consensus meets Solidity, compares Polymesh and Hedera, and sets out the build step by step.</p>
+      <div class="stats" style="grid-template-columns:repeat(4,minmax(0,1fr));">
+        <div class="stat"><div class="v">~11,000<small> /s</small></div><div class="l">proofs checked natively on this laptop (measured)</div></div>
+        <div class="stat"><div class="v">2,247<small> /s</small></div><div class="l">the most one Besu chain handles here, even with transactions that do nothing (measured)</div></div>
+        <div class="stat"><div class="v">~12–16<small> cores</small></div><div class="l">per validator for 10,000 payments/s (estimate)</div></div>
+        <div class="stat"><div class="v">~0.5–1.2<small> s</small></div><div class="l">per payment, individually final (estimate)</div></div>
+      </div>
+      <div class="go"><a href="design.html">Read the design →</a></div>
+    </div>
+
+    <div class="card">
+      <div class="kicker">Measured</div>
+      <h2>Throughput findings</h2>
+      <p>Stress tests of the maximalist DvP, each privacy building block, a minimal private payment with a side effect, and a Besu chain driven to saturation.</p>
+      <div class="stats">
+        <div class="stat"><div class="v">0.7<small> /s</small></div><div class="l">maximalist DvP peak</div></div>
+        <div class="stat"><div class="v">2.2<small> s</small></div><div class="l">private payment latency</div></div>
+        <div class="stat"><div class="v">~114<small> /s</small></div><div class="l">payments one Besu chain absorbs</div></div>
+        <div class="stat"><div class="v">~17×</div><div class="l">more chain needed for 2,000/s</div></div>
+      </div>
+      <div class="go"><a href="findings.html">Read the findings →</a></div>
+    </div>
+
+    <div class="card">
+      <div class="kicker">Alternatives</div>
+      <h2>Rayls &amp; Nightfall</h2>
+      <p>The two products closest to “Solidity plus a shielded pool for banks”, examined through their open-source code.</p>
+      <ul>
+        <li><strong>Rayls:</strong> ~1–4 payments/s across 20 banks without batching, with 20–60 s latency, and the operator can decrypt everything.</li>
+        <li><strong>Nightfall_4:</strong> ~6k gas per transfer, but one huge rollup prover, no programmability, and still experimental.</li>
+      </ul>
+      <div class="go"><a href="rayls-nightfall.html">Read the investigation →</a></div>
+    </div>
+
+    <div class="card">
+      <div class="kicker">The short answer</div>
+      <h2>Is this ready for a national network?</h2>
+      <ul>
+        <li><strong>Besu:</strong> yes for wholesale RTGS volumes (a few to ~10 payments/s); no for retail instant payments on one chain.</li>
+        <li><strong>Paladin:</strong> not yet. Wholesale volume is within reach, but v0.15 failed 3.5% of payments, and it can generate only one Zeto proof at a time per bank per token.</li>
+        <li><strong>Retail volume with privacy and Solidity:</strong> no product does it today, Polymesh included, but there is a viable design built from parts already in production.</li>
+      </ul>
+      <div class="go"><a href="design.html">See the design →</a></div>
+    </div>
+
+
+    <div class="card wide">
+      <div class="kicker">In the repository</div>
+      <h2>Run it yourself</h2>
+      <div class="tablewrap" style="box-shadow:none;margin:4px 0 0;"><table class="repo">
+        <tr><td><code>RUNBOOK.md</code></td><td>Bring the cluster up after a shutdown, record a new use case, and re-run the benchmarks</td></tr>
+        <tr><td><code>BACKEND.md</code></td><td>How recordings are captured and how the demo reads them</td></tr>
+        <tr><td><code>benchmarks/FINDINGS.md</code></td><td>The full throughput write-up, with raw results in <code>benchmarks/results/</code></td></tr>
+        <tr><td><code>benchmarks/chain-saturation/</code></td><td>Self-contained Besu saturation test (needs only Docker and Node.js)</td></tr>
+        <tr><td><code>benchmarks/rayls-nightfall.md</code></td><td>The alternatives investigation, with file-level references into the vendor code</td></tr>
+        <tr><td><a href="paladin-directions.html"><code>paladin-directions.html</code></a></td><td>Early design options for the demo's interface</td></tr>
+      </table></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // List the use cases from the same index the demo reads, so new recordings appear here automatically.
+  fetch('recordings/index.json').then(r => r.json()).then(list => {
+    const box = document.getElementById('usecases');
+    box.textContent = '';
+    list.forEach((s, i) => {
+      const a = document.createElement('a');
+      a.className = 'uc' + (i === list.length - 1 ? ' new' : '');
+      a.href = 'paladin-demo.html?scenario=' + encodeURIComponent(s.id);
+      const n = document.createElement('div'); n.className = 'n'; n.textContent = s.name;
+      const t = document.createElement('div'); t.className = 't'; t.textContent = s.tagline || '';
+      a.append(n, t); box.append(a);
+    });
+  }).catch(() => {
+    document.querySelector('#usecases .t').textContent = 'Couldn’t load recordings/index.json. Serve this folder over HTTP.';
+  });
+</script>
+</body>
+</html>

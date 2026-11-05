@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Paladin Concept Demo · Recommended design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="report.css" />
+</head>
+<body>
+<div class="hdr">
+  <a class="brand" href="index.html"><span class="logo"></span><span class="bname">Paladin</span><span class="bsub">Bank consortium PoC</span></a>
+  <div class="spacer"></div>
+  <nav class="sitenav">
+    <a href="index.html">Home</a>
+    <a href="paladin-demo.html">Replay demo</a>
+    <a href="findings.html">Throughput findings</a>
+    <a href="rayls-nightfall.html">Rayls &amp; Nightfall</a>
+    <a href="design.html" class="on">Recommended design</a>
+  </nav>
+</div>
+
+<div class="layout">
+  <nav class="toc">
+    <div class="tl">On this page</div>
+    <a href="#answer">The short answer</a>
+    <a href="#products">Does a product do this?</a>
+    <a href="#words">Words used here</a>
+    <a href="#why">Why Besu tops out</a>
+    <a href="#architecture">The design in one picture</a>
+    <a href="#walkthrough">Walkthrough: one payment</a>
+    <a href="#consensus">The consensus, and where Solidity fits</a>
+    <a href="#solidity">The Solidity model</a>
+    <a href="#paladin-besu">Built on Paladin and Besu?</a>
+    <a href="#build">The build, step by step</a>
+    <a href="#unheard">Why you haven't heard of it</a>
+    <a href="#maturity">How mature is it?</a>
+    <a href="#capacity">Capacity at 10,000/s</a>
+    <a href="#batching">Where batching is (and isn't)</a>
+    <a href="#privacy">Privacy and blast radius</a>
+    <a href="#risks">Risks</a>
+    <a href="#sources">Sources</a>
+  </nav>
+
+  <main>
+    <div class="kicker">Recommended design · 5 November 2026</div>
+    <h1>Private Solidity for interbank payments at retail volume</h1>
+    <p class="lede">Keep Paladin at every bank, and keep Solidity. Change the shared ledger underneath so it checks payment proofs on
+      all its cores at once, <em>before</em> putting payments in order. Then the only step done one at a time is a microsecond
+      “is this note already spent?” test. Each payment settles on its own and is final in about a second.</p>
+    <div class="meta">Tags: <span class="tag m">measured</span> on this laptop or in the PoC; <span class="tag e">estimate</span> derived from
+      measured costs, or from published figures, as cited.</div>
+
+    <!-- ===================================================== -->
+    <section id="answer">
+      <h2>The short answer</h2>
+      <div class="stats">
+        <div class="stat"><div class="v">~11,000<small> /s</small></div><div class="l">payment proofs checked on this 8-core laptop, all cores at once <span class="tag m">measured</span></div></div>
+        <div class="stat"><div class="v">2,247<small> /s</small></div><div class="l">the most one Besu chain handles here, even with transactions that do nothing <span class="tag m">measured</span></div></div>
+        <div class="stat"><div class="v">~12–16<small> cores</small></div><div class="l">per validator for 10,000 payments/s <span class="tag e">estimate</span></div></div>
+        <div class="stat"><div class="v">~0.5–1.2<small> s</small></div><div class="l">per payment, individually final; SEPA Instant allows 10 s <span class="tag e">estimate</span></div></div>
+      </div>
+      <ul>
+        <li><strong>Banks keep Paladin.</strong> Solidity runs privately among the banks in each deal (Pente privacy groups), and cash moves as
+          zero-knowledge notes (Zeto). That's what this PoC built and measured.</li>
+        <li><strong>The shared ledger takes two kinds of transaction in one stream.</strong>
+          <ul>
+            <li><strong>Payments</strong> are handled by code built into the node, which checks their proofs in parallel. This is the <em>fast lane</em>.</li>
+            <li><strong>Ordinary Solidity</strong> is run by the EVM, as on Besu today. This is the <em>EVM lane</em>.</li>
+          </ul></li>
+        <li><strong>A DAG-based consensus puts that stream in order.</strong> It's the kind Sui runs in production, with commits in about half a
+          second. Each payment is final when it's committed. There's no L2, and no settlement batching.</li>
+      </ul>
+      <div class="callout info"><span class="ct">Does a product do this already?</span>No. The closest are <strong>Hedera</strong>, which has this
+        exact two-lane shape and even Besu's EVM, but no privacy, and <strong>Polymesh</strong>, which has Solidity and confidential assets,
+        but its privacy is still on testnet and relies on an auditor key that can read every payment. Building this means adding a
+        shielded-note service to a ledger shaped like Hedera's. <a href="#products">Details</a>.</div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="products">
+      <h2>Is there a product that already does this?</h2>
+      <p>No. Each one is missing at least one of the four things this needs: Solidity; privacy with no all-seeing key; retail volume; and
+        each payment final within seconds.</p>
+      <div class="tablewrap"><table>
+        <tr><th>Product</th><th>Solidity</th><th>Private, with no all-seeing key</th><th>Retail volume, final in seconds</th><th>Status</th></tr>
+        <tr class="hl"><td><strong>Polymesh</strong> v8</td><td>Yes, since July 2026, but contracts can't yet use its confidential assets</td><td><span class="verdict-bad">Partly</span>: an asset's auditor key reads all of its payments</td><td>Not published; the runtime applies transactions one at a time</td><td>Confidential assets on testnet only</td></tr>
+        <tr class="hl"><td><strong>Hedera</strong> (open source as Hiero)</td><td>Yes: Besu's EVM</td><td><span class="verdict-bad">No</span> privacy</td><td>Yes for native tokens (10,000 transfers/s limit); the EVM is capped at 15M gas/s</td><td>Production</td></tr>
+        <tr><td>Sui</td><td>No: Move</td><td>No shielded pool built in</td><td>Yes: commits in about half a second</td><td>Production</td></tr>
+        <tr><td>Canton</td><td>No: Daml</td><td>Yes: each party sees only its own contracts (no zero-knowledge)</td><td>No published capacity at this scale; a new multi-leader consensus is in testing</td><td>Production</td></tr>
+        <tr><td>Rayls</td><td>Yes</td><td><span class="verdict-bad">No</span>: the operator decrypts everything</td><td>No: 1–4 payments/s without batching (<a href="rayls-nightfall.html#rayls">see</a>)</td><td>Commercial</td></tr>
+        <tr><td>Nightfall_4</td><td>No</td><td>Yes</td><td>No: one very large prover (<a href="rayls-nightfall.html#nightfall">see</a>)</td><td>Experimental</td></tr>
+        <tr><td>ZKsync Prividium</td><td>Yes</td><td><span class="verdict-bad">No</span>: the operator sees everything</td><td>Not assessed</td><td>Commercial</td></tr>
+        <tr><td>Paladin on Besu (this PoC)</td><td>Yes</td><td>Yes</td><td>No: about 114 payments/s per chain</td><td>v0.15</td></tr>
+      </table></div>
+
+      <h3>Polymesh, in more detail</h3>
+      <p>Polymesh is a blockchain for regulated securities. Its validators have to be licensed and approved through its own governance, and
+        identity and compliance are built in. Two recent changes make it look close to what we want:</p>
+      <ul>
+        <li><strong>Solidity, since v8</strong> (mainnet, 22 July 2026). Contracts compiled with the standard Solidity compiler run with full
+          EVM compatibility. Polymesh says letting contracts use its built-in identity, compliance and settlement features is still in development.</li>
+        <li><strong>Confidential Assets</strong>, which work like a shielded pool. The chain holds sealed account states and publishes a spent
+          marker on each spend, so validators can't tell which account changed. Each transfer's details are stored on-chain, encrypted for the
+          sender, receiver, any mediator and any auditor. Polymath's May 2026 press release called this launched; Polymesh's own documentation
+          says it's live on testnet only, and not yet on mainnet.</li>
+      </ul>
+      <p><strong>Why it doesn't fit, today:</strong></p>
+      <ul>
+        <li><strong>Not usable yet:</strong> the privacy feature isn't on mainnet, and Solidity can't call it. So there are no programmable
+          private payments today.</li>
+        <li><strong>The wrong shape for instant payments:</strong> settlement is an instruction that each party, and optionally a mediator,
+          affirms before it executes. That suits securities, not a one-shot payment.</li>
+        <li><strong>Blast radius:</strong> a regulated cash asset would have an auditor, and that one key opens every payment's details across
+          all history. It's the same class of risk as Rayls's operator key, scoped per asset. Because the encrypted details stay on-chain for
+          good, they're also exposed to future quantum decryption.</li>
+        <li><strong>Throughput unknown:</strong> Polymesh publishes no throughput figures. Like all Substrate chains, its runtime applies
+          transactions one at a time, so proof checks would be serial inside each block. That's the same structural limit we measured on Besu
+          (my inference; not measured).</li>
+      </ul>
+      <p><strong>Verdict:</strong> worth watching, as the only product that combines Solidity, a shielded state model and bank-grade
+        compliance. Look again when Confidential Assets reach mainnet and Solidity can drive them. Ask Polymesh for throughput figures, and
+        for an audit model without a standing key that can read everything.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="words">
+      <h2>Words used on this page</h2>
+      <div class="tablewrap"><table>
+        <tr><th>Term</th><th>Meaning</th></tr>
+        <tr><td><strong>Note</strong></td><td>A digital banknote of settlement money (tokenised central-bank reserves), owned by a bank. On the ledger
+          it appears only as a sealed hash, called a <em>commitment</em>. Its value and owner are known only to the banks involved.</td></tr>
+        <tr><td><strong>Proof</strong></td><td>A zero-knowledge proof (Groth16, 256 bytes) that a payment is valid: the payer owns the notes,
+          the amounts balance, and the rules are met. It reveals none of those details. The paying bank makes it in 0.1–0.3 s; anyone can check it in 0.65 ms.</td></tr>
+        <tr><td><strong>Spent marker</strong></td><td>A random-looking tag a payment publishes for each note it spends; cryptographers call it a
+          <em>nullifier</em>. The same note always produces the same tag, so a second spend is caught, but nobody can tell which note it was.</td></tr>
+        <tr><td><strong>Note tree</strong></td><td>A hash tree of every note ever created. A proof shows its notes are in the tree without saying where.</td></tr>
+        <tr><td><strong>Validator</strong></td><td>A node, run by the central bank or a member bank, that orders and applies transactions.</td></tr>
+        <tr><td><strong>Commit</strong></td><td>The moment the validators' agreed order for the latest transactions becomes final, a few times a second.</td></tr>
+        <tr><td><strong>Privacy group</strong></td><td>A private Solidity environment shared only by the banks in a deal (Paladin's Pente).</td></tr>
+        <tr><td><strong>Lane</strong></td><td>The kind of transaction. The fast lane is payments handled by code built into the node; the EVM lane is ordinary Solidity.</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="why">
+      <h2>Why Besu tops out, and why an L2 doesn't help</h2>
+      <p>A ledger node does three jobs for each transaction: it <strong>checks</strong> it (signatures and proofs), <strong>orders</strong> it
+        (consensus), and <strong>applies</strong> it (updates the balances). Besu does all three in one loop, one block at a time, one
+        transaction at a time. The proof check is the expensive part, but it depends on no shared state, so it could run on any core.</p>
+      <div class="tablewrap"><table>
+        <tr><th>One Besu chain on this laptop</th><th class="n">Transactions/s</th><th>What it shows</th></tr>
+        <tr><td>Zeto-like transfer: proof checked inside the EVM</td><td class="n">317 <span class="tag m">measured</span></td><td>Today's ceiling for a private payment's cash leg</td></tr>
+        <tr><td>Noto-like transfer: one signature and 4 new storage slots</td><td class="n">935 <span class="tag m">measured</span></td><td>Roughly what a payment would cost if its proof were checked <em>before</em> the block</td></tr>
+        <tr><td>Plain transfer: nothing to execute</td><td class="n">2,247 <span class="tag m">measured</span></td><td>Besu's floor: about 0.45 ms of serial block pipeline per transaction</td></tr>
+        <tr class="hl"><td>Proof checks alone, outside Besu, natively on all 8 cores</td><td class="n">~11,000 <span class="tag m">measured</span></td><td>0.65 ms each, scaling at 92% across cores</td></tr>
+      </table></div>
+      <p>With 4 validators, the Besu figures drop to 259, 600 and 1,724. <strong>Two conclusions:</strong></p>
+      <ul>
+        <li>Checking proofs in parallel is easy and fast.</li>
+        <li>Even then, Besu's block pipeline can't pass about 2,000 transactions/s here. So the fix has to change the ledger's pipeline,
+          not just the way proofs are checked.</li>
+      </ul>
+      <p><strong>“An L2 over a verification ledger is still throttled by the verification ledger.”</strong> That's right, and this design
+        doesn't use one. A ledger can throttle payments in two ways:</p>
+      <ol>
+        <li>By doing serial work for each one. That's Besu.</li>
+        <li>By making each one wait for finality somewhere else. That's a rollup: payments are final only when the outer chain accepts the
+          batch, unless you trust a single sequencer.</li>
+      </ol>
+      <p>This design fixes the first by making the ledger itself parallel. It avoids the second because each payment is final on this ledger.
+        An optional anchor to Besu or Ethereum receives one state root every few seconds, after payments are already final, so it can't throttle anything.</p>
+      <p><strong>The L2 options we rejected:</strong></p>
+      <ul>
+        <li><strong>ZK rollups:</strong> final only once the batch proof lands.</li>
+        <li><strong>Validiums such as Prividium:</strong> the operator sees everything.</li>
+        <li><strong>Nightfall:</strong> one very large prover.</li>
+        <li><strong>Optimistic rollups:</strong> days of challenge period.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="architecture">
+      <h2>The design in one picture</h2>
+<pre class="flow"> Bank A node (Paladin)                Bank B node (Paladin)
+ ┌──────────────────────────────┐     ┌──────────────────────────────┐
+ │ private Solidity (EVM)       │◄───►│ private Solidity (EVM)       │  A⇄B privacy group: only A and B run it
+ │ wallet: notes + prover       │     │ wallet: notes + prover       │  the payer proves its cash transfer (ZK)
+ └──────────────┬───────────────┘     └──────────────▲───────────────┘
+                │ submits 1 payment or bundle        │ watches for its new notes
+                ▼                                    │
+ ┌────────────────────────────────────────────────────────────────────────────────┐
+ │ Shared ledger: validators run by the central bank and 4–6 banks                │
+ │                                                                                │
+ │  1 CHECK   on arrival: proofs and signatures, on every core in parallel        │
+ │  2 ORDER   one DAG-based consensus orders every transaction                    │
+ │  3 APPLY   in that order, two kinds of transaction:                            │
+ │              FAST LANE  payments, by built-in code: spent test, add notes      │
+ │              EVM LANE   shared Solidity: registry, issuance, governance        │
+ │                         (it can call the fast lane through system contracts)   │
+ │                                                                                │
+ │  each transaction is final at commit · one state root covers both lanes        │
+ └────────────────────────────────────────────────────────────────────────────────┘
+                │  optional, every few seconds: one state root
+                ▼
+     anchor chain (the existing Besu, or Ethereum): audit trail only, not on the finality path</pre>
+      <ul>
+        <li><strong>Paladin runs on top with almost no change.</strong> Zeto's and Pente's base contracts become built-in system contracts with
+          the <em>same ABI</em>, so Paladin still talks to an ordinary Ethereum JSON-RPC ledger.</li>
+        <li><strong>A plain retail payment needs no privacy group</strong>, just one transfer with one proof. Groups come into play only for
+          private side effects, such as delivering a bond.</li>
+        <li><strong>Note details travel bank to bank</strong> over the nodes' own encrypted link, never via the ledger. So the ledger holds no
+          encrypted payment data that could be decrypted later.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="walkthrough">
+      <h2>Walkthrough: one payment, end to end</h2>
+      <p>Alice banks with Bank A, and Bob banks with Bank B. Alice pays Bob €50. As with SEPA Instant or UPI today, Alice's and Bob's
+        accounts stay in their banks' own systems. The shared ledger moves €50 of settlement money from Bank A to Bank B, and each bank holds
+        that money as a pool of notes in its Paladin wallet. Times are cumulative and approximate.</p>
+      <div class="tablewrap"><table>
+        <tr><th class="n">#</th><th class="n">Time</th><th>Who</th><th>What happens</th></tr>
+        <tr><td class="n">1</td><td class="n">0 ms</td><td>Alice, Bank A</td><td>Alice taps “Pay Bob €50”. Bank A's own systems check her balance and fraud rules and debit her account, as today.</td></tr>
+        <tr><td class="n">2</td><td class="n">~20 ms</td><td>Bank A's Paladin node</td><td>Picks two of its unspent notes, say €30 and €40, and locks them so no other payment uses them. It creates two new notes: €50 owned by Bank B, and €20 change for itself.</td></tr>
+        <tr><td class="n">3</td><td class="n">~20–320 ms</td><td>Bank A's prover</td><td>Makes the proof. In effect it says: “I own two notes that are in the note tree, and here are their spent markers. €30 + €40 = €50 + €20. Bank B is a registered member, and the amount is within limits.” It takes 0.1–0.3 s <span class="tag m">measured</span>.<br />
+          Meanwhile, Bank A's node sends Bank B the €50 note's contents (value, secret salt and Alice's payment reference) over the banks' direct encrypted link. Bank B holds them as pending.</td></tr>
+        <tr><td class="n">4</td><td class="n">~320 ms</td><td>Bank A → 2–3 validators</td><td>Submits one transaction: the proof, 2 spent markers, 2 sealed new notes, and the note-tree root it proved against. It's signed with a one-time key, so the ledger can't link it to Bank A.</td></tr>
+        <tr><td class="n">5</td><td class="n">+1 ms</td><td>Each validator</td><td>Checks the proof on a spare core (0.65 ms), and checks that both spent markers are new. A bad transaction is dropped here and never ordered.</td></tr>
+        <tr><td class="n">6</td><td class="n">~0.3–0.4 s</td><td>Validators</td><td>The transaction goes into the receiving validator's next DAG block, which is broadcast to the others. Each of them checks the proof itself on arrival.</td></tr>
+        <tr><td class="n">7</td><td class="n">~0.6–1.0 s</td><td>Consensus</td><td>The commit rule fires. Every validator independently works out the same ordered list, with this payment in it. <span class="tag e">estimate</span></td></tr>
+        <tr class="hl"><td class="n">8</td><td class="n">&lt; 1 ms later</td><td>Each validator</td><td>Applies it, in order: both spent markers are still new, so it records them and adds the two new notes to the note tree.
+          <strong>The payment is now final</strong> and can't be reversed. If an earlier transaction in the list had spent either note, this one would fail, the same way on every validator.</td></tr>
+        <tr><td class="n">9</td><td class="n">~50 ms later</td><td>Bank B, Bob</td><td>Bank B's node sees its €50 note on the ledger and matches it to the pending details from step 3. It marks the note spendable and tells Bank B's core system, which credits Bob and notifies him.</td></tr>
+        <tr class="hl"><td></td><td class="n"><strong>~0.5–1.2 s</strong></td><td colspan="2"><strong>Total.</strong> SEPA Instant's limit is 10 s.</td></tr>
+      </table></div>
+
+      <h3>Who sees what</h3>
+      <div class="tablewrap"><table>
+        <tr><th>Party</th><th>Sees</th></tr>
+        <tr><td>Alice and Bob</td><td>Their own account entries, as today</td></tr>
+        <tr><td>Bank A</td><td>Everything about the payment: it made it</td></tr>
+        <tr><td>Bank B</td><td>The amount, the reference, and that it came from Bank A, which it needs to credit Bob</td></tr>
+        <tr><td>Other banks, and all validators</td><td>A valid proof, 2 random-looking spent markers, 2 sealed notes and the time. Not the amount, payer, payee or either bank</td></tr>
+        <tr><td>The validator that receives it</td><td>Also the network address it came from, which is Bank A's, unless banks submit through a shared relay</td></tr>
+        <tr><td>Regulator</td><td>Nothing on the ledger. Each bank files an audit record encrypted to a k-of-n key for the period (<a href="#privacy">see</a>)</td></tr>
+      </table></div>
+
+      <h3>What if…</h3>
+      <ul>
+        <li><strong>…Bank A spends the €30 note twice, by bug or by fraud?</strong> Both transactions may pass the check on arrival, but the
+          commit order is the same everywhere. The first one applies; the second fails the spent-marker test on every validator. There's no fork,
+          and nothing to reconcile.</li>
+        <li><strong>…the proof is wrong?</strong> It's dropped at step 5 and never ordered.</li>
+        <li><strong>…validators fail?</strong> Up to 2 of 7 can crash or misbehave and the rest carry on: a BFT committee of 3f+1 tolerates f faulty validators.</li>
+        <li><strong>…Bank B's node is offline?</strong> The payment is still final at step 8. Bank A's node keeps re-sending the note details
+          until Bank B acknowledges them, and until then Bank B can't spend that €50. SEPA Instant checks that the payee's bank is reachable
+          first; Bank A can do the same before step 4.</li>
+      </ul>
+
+      <h3>The same payment with a side effect</h3>
+      <p>Say Bank A is paying for a bond Bank B delivers. Before step 3, both banks' nodes run the private Solidity contract (<a href="#solidity">below</a>)
+        in their shared privacy group, and Bank B signs the group's new state. Bank A's proof covers the cash leg, tied to that state change.
+        Bank A then submits both as one bundle, and at step 8 the ledger applies both or neither. That adds about 50–150 ms
+        <span class="tag e">estimate</span>.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="consensus">
+      <h2>How the fast consensus works, and where Solidity fits</h2>
+      <p>Consensus has one job: making every validator end up with the same transactions in the same order, even if some validators crash or
+        lie. It doesn't run Solidity or check proofs. The node does those before and after.</p>
+
+      <h3>Why Besu's consensus can't go faster</h3>
+      <ul>
+        <li><strong>How QBFT works:</strong> Besu uses QBFT, a leader-based protocol. Each round, one validator (the leader) builds a block and
+          executes it. The others execute it too, then vote on it in two rounds. Only then does the next round start.</li>
+        <li><strong>Why that limits it:</strong> execution sits inside every round, so a full block takes longer than its target. At
+          saturation, our 1-second blocks stretched to 1.5–2 s. And every transaction goes through one leader at a time.</li>
+      </ul>
+
+      <h3>What a DAG-based consensus does differently</h3>
+      <div class="tablewrap"><table>
+        <tr><th></th><th>Leader-based (Besu's QBFT)</th><th>DAG-based (Mysticeti, Narwhal/Bullshark, Hedera's hashgraph)</th></tr>
+        <tr><td><strong>Who proposes transactions</strong></td><td>One leader per round</td><td>Every validator, every round, in parallel</td></tr>
+        <tr><td><strong>How votes happen</strong></td><td>Separate vote messages, in two rounds</td><td>Built in: each new block references the blocks its author has seen, and those references count as votes</td></tr>
+        <tr><td><strong>When transactions execute</strong></td><td>Before voting, inside every round</td><td>After ordering, outside the consensus loop</td></tr>
+        <tr><td><strong>What limits it</strong></td><td>The leader, and execution time per block</td><td>Network bandwidth across all validators</td></tr>
+        <tr><td><strong>Numbers</strong></td><td>1,724–2,247 plain transfers/s here <span class="tag m">measured</span></td><td>Mysticeti: over 200,000 transactions/s at about 0.5 s in published benchmarks; on Sui mainnet since 2024</td></tr>
+      </table></div>
+      <p>A DAG (“directed acyclic graph”) is just the web of blocks pointing back at earlier blocks. Every validator sees the same web, so each
+        can work out on its own, by a fixed rule, which blocks are committed and in what order. No validator waits for a leader, and there's
+        no extra round of voting.</p>
+
+      <h3>One ledger, not two chains</h3>
+      <p>The two lanes aren't two chains. There's one set of validators, one order, one state and one state root, so there's no bridge. A
+        transaction's lane matters only before ordering (what to check) and after it (how to apply it):</p>
+<pre class="flow"> 1 ARRIVE      A bank sends a transaction to a validator.
+               Payment: the validator checks its proof right away, on a spare core.
+               Solidity transaction: the usual signature check.
+ 2 SHARE       Every ~100 ms, each validator publishes a small block: its new transactions,
+               plus references to the blocks it has received from the others.
+ 3 AGREE       When enough later blocks reference a round's leader block, every validator
+               independently concludes it's committed. No separate vote is needed.
+ 4 ORDER       That block, and everything it references that isn't yet committed, becomes
+               one ordered list. Every validator computes the identical list.
+ 5 APPLY       The executor walks the list in order:
+                 payment      → are its spent markers new? Record them; add its notes   (µs)
+                 Solidity tx  → run it in the EVM, exactly as on Besu today             (ms, capped)
+ 6 CHECKPOINT  Validators sign the resulting state root. To Paladin this is an ordinary
+               Ethereum block: the same JSON-RPC, the same events and receipts.</pre>
+      <p>Only step 5 is done one at a time, and for a payment it takes a fraction of a millisecond. EVM work in each commit is capped, so a
+        heavy contract can delay the payments ordered after it by tens of milliseconds at most.</p>
+
+      <h3>Three ways Solidity touches payments</h3>
+      <div class="tablewrap"><table>
+        <tr><th>Where the Solidity runs</th><th>How it touches cash</th><th>Volume</th></tr>
+        <tr class="hl"><td>In a privacy group, on the banks' Paladin nodes</td><td>It emits a cash call. The bank's node bundles that with the group's state change into one fast-lane transaction</td><td>Retail</td></tr>
+        <tr><td>On the shared EVM lane, calling the fast lane</td><td>It calls a system contract at a fixed address, for example to issue notes against reserves or to settle a public DvP. The call is atomic with the EVM transaction, and cheap, because the proof was checked on arrival</td><td>Low</td></tr>
+        <tr><td>On the shared EVM lane, reading</td><td>It reads facts such as “is this spent marker recorded?”, “is this note-tree root valid?” and total supply</td><td>Low</td></tr>
+      </table></div>
+
+      <h3>How existing systems join the two lanes</h3>
+      <ul>
+        <li><strong>Hedera:</strong> Solidity calls the built-in token service through a system contract at address <code>0x167</code>, inside
+          the same transaction. This design copies that model.</li>
+        <li><strong>Hyperliquid:</strong> HyperEVM contracts read the built-in exchange's state as it stood when the EVM block was built.
+          Writes go through a <code>CoreWriter</code> contract and are processed afterwards, and the EVM transaction succeeds whether or not
+          the action is accepted. That's too loose for atomic payments.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="solidity">
+      <h2>The Solidity programming model</h2>
+      <p>Developers write ordinary Solidity and deploy it inside a privacy group. To move cash, the contract emits a call to the cash system
+        contract, and the bank's node turns that into a zero-knowledge transfer <em>bundled</em> with the group's state change. This is the
+        contract we built and measured in the <a href="paladin-demo.html?scenario=private-payment">private payment tab</a>:</p>
+<pre class="flow">// Deployed inside the A⇄B privacy group: only Bank A's and Bank B's nodes ever execute it.
+contract PrivateSettlement {
+    address immutable seller;
+    address immutable buyer;
+    mapping(address => uint256) public bondOf;
+    event PenteExternalCall(address indexed contractAddress, bytes encodedCall);
+
+    function settle(bytes32 tradeId, uint256 units, address cash, bytes calldata cashTransfer) external {
+        require(msg.sender == seller, "seller only");
+        bondOf[seller] -= units;                       // private side effect
+        bondOf[buyer]  += units;
+        emit PenteExternalCall(cash, cashTransfer);    // the cash leg, settled atomically with the above
+    }
+}</pre>
+      <ul>
+        <li><strong>Programmable payments</strong> follow the same pattern, with different conditions before the cash call:
+          <ul>
+            <li>an oracle-signed delivery confirmation;</li>
+            <li>escrow released on a deadline;</li>
+            <li>coupon schedules;</li>
+            <li>netting <em>logic</em> between two banks, with each resulting payment still settled individually.</li>
+          </ul></li>
+        <li><strong>Rules that must hold for every payment</strong>, such as both parties being registered members or a per-payment limit, go
+          into the cash proof. The ledger can't accept a payment that breaks them.</li>
+        <li><strong>Simpler than on Besu:</strong> a payment with a side effect becomes <strong>one ledger transaction, with one proof and two
+          signatures</strong>. On Besu it took 3 transactions, 2 proofs and 949k gas.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="paladin-besu">
+      <h2>Would we build this on Paladin and Besu?</h2>
+      <div class="callout info"><span class="ct">Short answer</span>
+        <ul>
+          <li><strong>Paladin:</strong> yes. It stays the node each bank runs.</li>
+          <li><strong>Besu's EVM:</strong> yes, everywhere.</li>
+          <li><strong>Besu's consensus and block pipeline:</strong> only as a first step. Even a transaction with nothing to execute tops out
+            at 1,724–2,247/s on Besu here.</li>
+        </ul></div>
+      <div class="tablewrap"><table>
+        <tr><th>Part</th><th>In this PoC</th><th>In the design</th></tr>
+        <tr><td>Each bank's node</td><td>Paladin v0.15</td><td>Paladin, with fixes (<a href="#build">step 3</a>)</td></tr>
+        <tr><td>Private Solidity</td><td>Pente, inside Paladin, which embeds Besu's EVM</td><td>Unchanged</td></tr>
+        <tr><td>Cash circuits and proofs</td><td>Zeto</td><td>Unchanged, plus one input that ties a transfer to its bundle</td></tr>
+        <tr><td>Base contracts for Zeto and Pente</td><td>Solidity on Besu</td><td>Built-in system contracts at fixed addresses, with the same ABI</td></tr>
+        <tr><td>Shared Solidity</td><td>Besu's EVM</td><td>Besu's EVM, or revm on a Reth-based node</td></tr>
+        <tr><td>Consensus</td><td>QBFT</td><td>QBFT in step 1; DAG-based in step 2</td></tr>
+        <tr><td>What Paladin talks to</td><td>Besu's Ethereum JSON-RPC</td><td>The same Ethereum JSON-RPC, served by the new node</td></tr>
+      </table></div>
+      <p><strong>How far Besu alone can go</strong> (one chain, this laptop):</p>
+      <div class="tablewrap"><table>
+        <tr><th>Transaction</th><th class="n">1 validator</th><th class="n">4 validators</th></tr>
+        <tr><td>Zeto-like: proof checked inside the EVM (today)</td><td class="n">317 <span class="tag m">measured</span></td><td class="n">259 <span class="tag m">measured</span></td></tr>
+        <tr class="hl"><td>Noto-like: about what a payment costs once its proof is checked on arrival (step 1)</td><td class="n">935 <span class="tag m">measured</span></td><td class="n">600 <span class="tag m">measured</span></td></tr>
+        <tr><td>Plain transfer: nothing to execute (Besu's floor)</td><td class="n">2,247 <span class="tag m">measured</span></td><td class="n">1,724 <span class="tag m">measured</span></td></tr>
+      </table></div>
+      <ul>
+        <li><strong>What step 1 gets you:</strong> Besu with a fast lane should reach about 600–935 payments/s on this laptop
+          <span class="tag e">estimate</span>. That's 2–3× Zeto on Besu today, and over 5× the 114 payments/s we measured for a payment with a side
+          effect. It's enough for wholesale settlement and a retail pilot.</li>
+        <li><strong>Why it stops there:</strong> server hardware will do better, but not 10× better. The limit is Besu's serial block pipeline,
+          which costs about 0.45 ms per transaction here even when there's nothing to run.</li>
+      </ul>
+      <p><strong>For step 2 there are two credible bases.</strong> I'd test both with the same fast-lane code before choosing:</p>
+      <ul>
+        <li><strong>Hiero</strong>, Hedera's codebase, open source under Apache 2.0 at LF Decentralized Trust, the same foundation as Besu and Paladin.
+          <ul>
+            <li><strong>What it has:</strong> a DAG-based consensus (hashgraph); a built-in token lane, run at up to 10,000 transfers/s on
+              Hedera's mainnet; Besu's EVM for Solidity; and Solidity calls into the built-in lane.</li>
+            <li><strong>How it handles work:</strong> its node already separates a pre-handle step, run before a transaction is applied, from
+              a handle step that applies transactions in consensus order.</li>
+            <li><strong>What we'd add:</strong> a shielded-note service beside its token service.</li>
+            <li><strong>Unknowns:</strong> whether its Ethereum JSON-RPC relay is good enough for Paladin; its finality time in a private
+              deployment; and running it as a private network.</li>
+          </ul></li>
+        <li><strong>A Reth-based node with Narwhal/Bullshark consensus</strong>, the combination Rayls's <code>axyl</code> node uses.
+          <ul>
+            <li><strong>Strengths:</strong> it serves native Ethereum JSON-RPC, so it's compatible with Paladin as is, and it's fast Rust.</li>
+            <li><strong>Weakness:</strong> we'd build the fast lane and the arrival-time proof check ourselves.</li>
+          </ul></li>
+      </ul>
+      <p><strong>My lean is Hiero</strong>, if its JSON-RPC passes Paladin's integration tests. It's the only base where the two-lane pattern,
+        a DAG-based consensus and Besu's EVM already run together in production. If it doesn't pass, the Reth-based node is the fallback.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="build">
+      <h2>The build, step by step</h2>
+      <div class="tablewrap"><table>
+        <tr><th>Step</th><th>What gets built</th><th>Passes if</th><th>Rough effort <span class="tag e">estimate</span></th></tr>
+        <tr><td><strong>0. Prove the core</strong></td><td>A standalone fast-lane core: native proof check, spent-marker set and note tree, fed
+          real Zeto proofs from this PoC's cluster</td><td>A complete payment (check, double-spend test and note-tree update) costs at most
+          1.5 ms of one core, so 10,000/s fits on a 16-core validator; every double spend is rejected</td><td>2–4 weeks, 1–2 engineers</td></tr>
+        <tr><td><strong>1. Besu with a fast lane</strong></td><td>In a Besu fork:
+          <ul>
+            <li>built-in system contracts for transfer, group update and bundle, with Zeto's and Pente's ABIs;</li>
+            <li>proofs checked in parallel as transactions arrive, with results cached for block execution;</li>
+            <li>a native note tree.</li>
+          </ul>
+          Paladin is repointed to the new addresses</td><td>This PoC's private-payment scenario runs unchanged, as 1 transaction instead of 3;
+          ≥ 600 payments/s with 4 validators</td><td>3–6 months, 3–4 engineers</td></tr>
+        <tr><td><strong>2. Fast consensus</strong></td><td>Move step 1's fast lane onto a DAG-based node: a bake-off between Hiero and a
+          Reth-based node, then build out the winner</td><td>10,000 payments/s sustained; p99 finality under 2 s; 7 validators across 2–3 data
+          centres; still running with 2 validators down</td><td>6–12 months, 4–6 engineers</td></tr>
+        <tr><td><strong>3. Production hardening</strong></td><td>
+          <ul>
+            <li>Paladin fixes: the 3.5% of payments that failed; one proof at a time per bank and token; wallets holding thousands of notes.</li>
+            <li>GPU provers.</li>
+            <li>Note-tree epochs (<a href="#risks">see</a>).</li>
+            <li>k-of-n audit keys and a supply turnstile.</li>
+            <li>Formal verification of the circuits, and independent security audits.</li>
+            <li>Operations, then a pilot with 2–3 banks.</li>
+          </ul></td><td>Regulator and bank sign-off</td><td>6–12 months, overlapping step 2</td></tr>
+      </table></div>
+      <p><strong>End to end:</strong> a prototype at retail volume in about a year, and production in about 2–3 years with 8–12 engineers.
+        That's my rough judgment of the engineering, not a plan, and it excludes procurement and regulatory approval.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="unheard">
+      <h2>Why you haven't heard of a “two-lane” architecture</h2>
+      <p><strong>Because “two lanes” is my label.</strong> The usual names are “native services” or “system contracts beside an EVM”, and
+        “fast path versus consensus path”. The pattern is already in production:</p>
+      <ul>
+        <li><strong>Hedera:</strong> a built-in token service beside Besu's EVM, under one hashgraph consensus. Solidity calls the tokens
+          through <code>0x167</code>.</li>
+        <li><strong>Hyperliquid:</strong> its built-in exchange (HyperCore) beside HyperEVM, under one consensus (HyperBFT).</li>
+        <li><strong>Sui:</strong> a fast path for transactions that touch only their sender's objects, and full consensus for shared ones.</li>
+        <li><strong>Ethereum itself:</strong> precompiles are native code for exactly the BN254 operations we measured. They just run one
+          transaction at a time, inside each block.</li>
+      </ul>
+      <p><strong>The core idea is published central-bank research.</strong> Check every transaction in parallel first, and keep only a tiny
+        “is it already spent?” step serial. That's the main result of Project Hamilton (Boston Fed and MIT, 2022): 1.7 million transactions/s,
+        99% complete in under a second. Like a note pool, Hamilton's processor stored only 32-byte hashes of unspent funds.</p>
+      <p><strong>Why nobody has combined it with shielded notes and Solidity for banks:</strong></p>
+      <ol>
+        <li><strong>Privacy projects target public Ethereum</strong>, where the base layer can't be changed. So they're built as contracts
+          (Zeto, Railgun) or L2s (Aztec, Nightfall), and inherit the EVM's or the L1's limits. That's what we measured.</li>
+        <li><strong>Vendors selling to bank consortia ship on unmodified clients</strong>, such as Paladin on Besu. Banks want a supported,
+          audited client, and forking the ledger is a big commitment.</li>
+        <li><strong>The retail-scale research didn't use a shared ledger.</strong> Hamilton was a central processor, with no zero-knowledge;
+          privacy-preserving auditing was left for future work. Shared-ledger projects with privacy have mostly targeted wholesale volumes.</li>
+        <li><strong>Two of the pieces are recent:</strong> fast native proof libraries (gnark, which Besu now ships) and DAG-based consensus in
+          production (Mysticeti on Sui since 2024).</li>
+      </ol>
+      <p><strong>So it's new as a combination, not as an idea.</strong> That cuts both ways. There's no exotic research risk, but nobody has
+        done the integration, so there's no reference deployment to copy.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="maturity">
+      <h2>How mature is this, realistically?</h2>
+      <div class="tablewrap"><table>
+        <tr><th>Piece</th><th>In production today?</th><th>Maturity for us</th></tr>
+        <tr><td>Native zero-knowledge proof checks</td><td>Yes. Sui has native Groth16 verification; Besu ships gnark natively (measured here)</td><td><span class="pill yes">High</span> library code</td></tr>
+        <tr><td>DAG-based consensus</td><td>Yes: Mysticeti on Sui (since 2024), hashgraph on Hedera, Sonic's DAG consensus</td><td><span class="pill yes">High</span> in those codebases; we'd reuse one</td></tr>
+        <tr><td>DAG-based consensus driving an EVM</td><td>Yes: Hedera (hashgraph with Besu's EVM), Sonic, and Rayls's <code>axyl</code> (Reth with Narwhal/Bullshark)</td><td><span class="pill yes">Medium–high</span></td></tr>
+        <tr><td>A built-in lane beside an EVM, under one consensus</td><td>Yes: Hedera's tokens (10,000/s limit, against 15M gas/s for its EVM), and Hyperliquid</td><td><span class="pill yes">Medium–high</span> as a pattern</td></tr>
+        <tr><td>Shielded notes as a built-in ledger operation</td><td>Zcash (since 2016, at low volume); Polymesh's confidential assets (testnet)</td><td><span class="pill notyet">Low–medium</span> nobody does it at volume</td></tr>
+        <tr><td>Paladin (Pente, Zeto)</td><td>v0.15; 3.5% of payments failed in our tests</td><td><span class="pill notyet">Low–medium</span></td></tr>
+        <tr class="hl"><td><strong>The whole combination</strong></td><td>No</td><td><span class="pill no">Unbuilt</span> prototype stage</td></tr>
+      </table></div>
+      <div class="callout warn"><span class="ct">Bottom line</span>Every piece runs in production somewhere; nobody runs the combination. The
+        consensus is the most proven part. The main risks are the integration, and the shielded pool's own hazards: circuit bugs and state growth.</div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="capacity">
+      <h2>Capacity at 10,000 payments/s</h2>
+      <div class="tablewrap"><table>
+        <tr><th>Stage</th><th>Cost per payment</th><th>Runs on</th><th>Needed at 10,000/s</th></tr>
+        <tr><td>Proof check</td><td>0.65 ms of CPU <span class="tag m">measured</span></td><td>every validator, all cores</td><td><strong>~7 cores</strong> per validator</td></tr>
+        <tr><td>Note-tree update</td><td>2 new notes, ~18–30 hashes each at ~5–20 µs <span class="tag e">estimate</span></td><td>every validator, parallel by subtree</td><td>~2–5 cores</td></tr>
+        <tr><td>Signatures (bundles only)</td><td>2 checks at ~20–50 µs <span class="tag e">estimate</span></td><td>every validator, all cores</td><td>~1 core</td></tr>
+        <tr><td>Double-spend test and writes</td><td>2 spent markers, 2 note appends</td><td>every validator, in order</td><td>under 1 core</td></tr>
+        <tr><td>Consensus and networking</td><td>~0.5–1 KB</td><td>all validators</td><td>~5–10 MB/s, ~2 cores</td></tr>
+        <tr class="hl"><td><strong>Total per validator</strong></td><td></td><td></td><td><strong>~12–16 cores</strong> <span class="tag e">estimate</span></td></tr>
+        <tr><td>Proving</td><td>~0.1–0.3 s of CPU</td><td>the paying bank</td><td>~1,000–3,000 cores across all banks; GPUs cut this a lot</td></tr>
+        <tr><td>Private Solidity</td><td>ms of EVM plus a round trip</td><td>the group's members</td><td>scales with the number of groups; split busy bank pairs</td></tr>
+        <tr class="dim"><td>Shared EVM lane</td><td>~100 Mgas/s per chain <span class="tag m">measured</span></td><td>every validator, in order</td><td>kept off the payment path</td></tr>
+      </table></div>
+      <p>For scale, UPI averaged roughly 8,500–9,000 payments/s in mid-2026. That's derived from NPCI's monthly volumes, and peaks are higher.
+        The binding costs move to the edges: banks pay for proving, roughly in proportion to what they send.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="batching">
+      <h2>Where batching is used, and where it isn't</h2>
+      <div class="tablewrap"><table>
+        <tr><th>Layer</th><th>Batched?</th><th>Effect on a payment</th></tr>
+        <tr class="hl"><td>Settlement</td><td><strong>Never</strong></td><td>Each payment is its own transaction, gross and individually final at commit. No netting, and no waiting for others.</td></tr>
+        <tr><td>Consensus blocks</td><td>Yes, as in every ledger</td><td>A validator's block closes every ~100 ms, and a payment waits for at most one. It's the same as Besu blocks today, but faster.</td></tr>
+        <tr><td>Proof checking</td><td>Optional</td><td>Checking a block's proofs together is a mathematical shortcut that involves no waiting and roughly halves the cost. It isn't assumed in the numbers above.</td></tr>
+        <tr><td>External anchoring</td><td>Yes</td><td>One root per interval, after payments are already final. Payments never wait for it.</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="privacy">
+      <h2>Privacy and blast radius</h2>
+      <div class="tablewrap"><table>
+        <tr><th>If this is compromised…</th><th>…the attacker learns</th></tr>
+        <tr><td>Any or all validators, or a full copy of the ledger</td><td>Nothing: sealed notes, spent markers, proofs and group state hashes only</td></tr>
+        <tr><td>A future quantum computer reading the ledger</td><td>Nothing readable: the ledger stores no encrypted payment data</td></tr>
+        <tr><td>One bank</td><td>That bank's own payments and private groups, which it already has</td></tr>
+        <tr><td>Regulator audit access</td><td>One period's records, and only if k of n keyholders collude</td></tr>
+        <tr class="dim"><td>For comparison: Polymesh's auditor key for an asset</td><td>Every payment in that asset, across all history</td></tr>
+        <tr class="dim"><td>For comparison: a TEE, Rayls's operator key, or today's RTGS database</td><td>All of history</td></tr>
+      </table></div>
+      <ul>
+        <li><strong>Regulator access without a master key:</strong>
+          <ul>
+            <li>Each bank encrypts an audit record of each payment to a <em>per-period</em> key, split k-of-n, for example among the central bank, the supervisor and a court.</li>
+            <li>Keys are destroyed after the retention period.</li>
+            <li>The records live with the regulator, not on the shared ledger.</li>
+          </ul></li>
+        <li><strong>Anonymity:</strong> unlike Rayls's 6-bank sets, notes hide which banks transacted from everyone but the two parties. Timing remains visible.</li>
+        <li><strong>Submission metadata:</strong> the validator that receives a payment sees which bank's network address sent it. A shared relay,
+          or always submitting through the central bank's validator, confines that to one party.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="risks">
+      <h2>Risks</h2>
+      <ul>
+        <li><strong>Invisible counterfeiting:</strong> a circuit bug in a shielded pool could mint money that nobody can see. The mitigations are:
+          <ul>
+            <li>formal verification of the circuits, as EthSystems did for its shielded pool in October 2026;</li>
+            <li>a supply turnstile that reconciles total supply against reserves on the EVM lane.</li>
+          </ul></li>
+        <li><strong>State growth:</strong> at 10,000 payments/s around the clock, the ledger gains about 1.7 billion notes and 1.7 billion spent
+          markers a day. That's at least ~110 GB a day <span class="tag e">estimate</span>. A shielded ledger can't delete spent notes, because
+          it can't tell which they are. The plan is epochs:
+          <ul>
+            <li>start a fresh note tree and spent-marker set each period;</li>
+            <li>banks move their unspent notes across, a few thousand per bank;</li>
+            <li>archive the old tree and set.</li>
+          </ul></li>
+        <li><strong>First-of-a-kind integration:</strong> there's no reference deployment. The consensus is proven; the way the pieces join isn't.</li>
+        <li><strong>Note management:</strong> a bank can send in parallel only as far as it holds spendable notes, so wallets must keep thousands
+          of notes and pick them without conflicts. That's engineering, not a protocol limit.</li>
+        <li><strong>Hot private groups:</strong> a group's state changes one step at a time. Split busy bank pairs by business line, or keep state per trade.</li>
+        <li><strong>Proving cost</strong> lands on the banks. Size it with GPU provers before committing.</li>
+        <li><strong>The numbers aren't end-to-end yet.</strong>
+          <ul>
+            <li><strong>Measured:</strong> proof checking and Besu's ceilings.</li>
+            <li><strong>Published:</strong> the consensus figures.</li>
+            <li><strong>Estimated:</strong> the note-tree cost.</li>
+          </ul>
+          Step 0 measures the estimated costs.</li>
+      </ul>
+      <p>Measurements behind this page:</p>
+      <ul>
+        <li><code>benchmarks/results/native-bn254-verification.md</code>: proof checking;</li>
+        <li><code>benchmarks/results/chain-saturation.jsonl</code> and <code>benchmarks/FINDINGS.md</code> §4a: Besu's ceilings, including plain transfers.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="sources">
+      <h2>Sources</h2>
+      <ul class="sources">
+        <li>Polymesh: <a href="https://polymesh.network/blog/polymesh-v8-is-here">v8 announcement</a>; <a href="https://developers.polymesh.network/confidential-assets/">Confidential Assets docs</a> (testnet status); <a href="https://developers.polymesh.network/confidential-assets/architecture/">architecture</a>; <a href="https://developers.polymesh.network/confidential-assets/settlement-workflow/">settlement workflow</a>; <a href="https://developers.polymesh.network/development/changelogs/v7.4-to-v8.0/smart-contracts-evm/">v8 smart-contract changelog</a>; <a href="https://developers.polymesh.network/polymesh-docs/network/consensus">consensus</a>; <a href="https://www.polymath.network/articles/polymath-launches-confidential-assets-on-polymesh-bringing-institutional-grade-privacy-to-tokenization">Polymath press release</a>; <a href="https://coinpaprika.com/education/polymesh-polyx/">coinpaprika review</a></li>
+        <li>Hedera and Hiero: <a href="https://docs.hedera.com/hedera/networks/mainnet">mainnet throttles</a>; <a href="https://deploy-preview-218--hedera-hips.netlify.app/hip/hip-206">HIP-206 token service precompile</a>; <a href="https://lfdecentralizedtrust.org/blog/introducing-hiero-bringing-hederas-core-network-software-to-linux-foundation-decentralized-trust">Introducing Hiero</a>; <a href="https://github.com/hiero-ledger/hiero-consensus-node/tree/main/hedera-node/hedera-app/src/main/java/com/hedera/node/app/workflows/prehandle">pre-handle workflow source</a></li>
+        <li>Hyperliquid: <a href="https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/evm/system-contract">interacting with HyperCore</a>; <a href="https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm">HyperEVM</a></li>
+        <li>Sui: <a href="https://docs.sui.io/references/framework/sui/groth16">sui::groth16</a>; <a href="https://decrypt.co/243313/sui-sets-the-standard-for-blockchain-speed-with-new-mainnet-consensus-mechanism">Mysticeti on mainnet</a>; <a href="https://docs.sui.io/learn/architecture/consensus">consensus docs</a>; <a href="https://chainflow.io/sui-mysticeti-upgrade-demystified/">fast path explained</a></li>
+        <li><a href="https://arxiv.org/pdf/2310.14821">Mysticeti</a> (NDSS 2025); <a href="https://arxiv.org/abs/2105.11827">Narwhal and Tusk</a>; <a href="https://www.arxiv.org/pdf/2201.05677">Bullshark</a></li>
+        <li>Project Hamilton: <a href="https://www.usenix.org/conference/nsdi23/presentation/lovejoy">NSDI '23 paper</a>; <a href="https://www.dci.mit.edu/project-hamilton-and-opencbdc-faqs">MIT DCI FAQ</a>; <a href="https://www.bostonfed.org/news-and-events/press-releases/2022/frbb-and-mit-open-cbdc-phase-one.aspx">Boston Fed release</a></li>
+        <li>Canton: <a href="https://docs.canton.network/global-synchronizer/release-notes/canton-releases/3-5-15">3.5.15 release notes</a> (CantonBFT); <a href="https://docs.canton.network/global-synchronizer/extension-synchronizers/private-synchronizers">private synchronizers</a></li>
+        <li>Sonic: <a href="https://blog.fantom.foundation/michael-kong-unveils-sonics-launch-and-beyond/">Fantom Foundation</a></li>
+        <li><a href="https://bundesbank.de/resource/blob/739242/0d391501c8d7457f782b9fd5c0d62998/mL/tips-faq-data.pdf">Bundesbank TIPS FAQ</a> (SEPA Instant's 10-second rule)</li>
+        <li><a href="https://openthemagazine.com/business/upi-hits-record-232-billion-transactions-in-may-2026-what-the-latest-npci-data-reveals">UPI May 2026 volumes</a>; <a href="https://www.deccanchronicle.com/business/upi-nears-30-lakh-crore-in-august-as-transaction-volume-hits-record-high-1983994">UPI August 2026 record</a></li>
+        <li><a href="https://www.chaincatcher.com/en/article/2299302">EthSystems formal verification of a shielded pool</a></li>
+      </ul>
+    </section>
+  </main>
+</div>
+</body>
+</html>

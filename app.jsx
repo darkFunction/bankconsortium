@@ -137,8 +137,12 @@
   /* ---------- main ---------- */
   function App() {
     const load = (k, d) => { try { const v = localStorage.getItem('palDemo.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
-    const [scnId, setScnId] = useState(() => load('scenario', 'simple-token'));
-    const [step, setStep] = useState(() => load('step', 0));
+    // ?scenario=<id> (used by the index page) opens that use case at step 1.
+    const urlScn = new URLSearchParams(window.location.search).get('scenario');
+    const [scnId, setScnId] = useState(() => urlScn || load('scenario', 'simple-token'));
+    const [step, setStep] = useState(() => (urlScn ? 0 : load('step', 0)));
+    // Drop the parameter once read, so a reload keeps whatever tab the viewer moved to.
+    useEffect(() => { if (urlScn) window.history.replaceState(null, '', window.location.pathname); }, []);
     const [viewer, setViewer] = useState(() => load('viewer', 'omniscient'));
     const [auto, setAuto] = useState(false);
     const [flights, setFlights] = useState([]);
@@ -234,10 +238,10 @@
       <div className="pal app">
         {/* header */}
         <div className="hdr">
-          <div className="brand">
+          <a className="brand" href="index.html" title="Home" style={{ textDecoration: 'none', color: 'inherit' }}>
             <span className="logo" />
             <span className="bname">Paladin</span><span className="bsub">Concept Demo</span>
-          </div>
+          </a>
           <div className="tabs">
             {scenarios.map(s => (
               <button key={s.id} className={'tabbtn' + (s.id === scnId ? ' on' : '')} onClick={() => { setScnId(s.id); setStep(0); setAuto(false); }}>{s.name}</button>
@@ -245,6 +249,7 @@
           </div>
           <div className="tagline">{scn.tagline}</div>
           <div className="spacer" />
+          <a className="btn" href="findings.html" style={{ textDecoration: 'none' }}>Throughput findings</a>
           <button className="btn" onClick={() => { setAuto(a => !a); }}>{auto ? '❚❚ Pause' : '▶ Auto-play'}</button>
           <button className="btn ghost" onClick={() => { setStep(0); setAuto(false); }}>Reset</button>
         </div>

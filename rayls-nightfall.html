@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Paladin Concept Demo · Rayls and Nightfall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="report.css" />
+</head>
+<body>
+<div class="hdr">
+  <a class="brand" href="index.html"><span class="logo"></span><span class="bname">Paladin</span><span class="bsub">Bank consortium PoC</span></a>
+  <div class="spacer"></div>
+  <nav class="sitenav">
+    <a href="index.html">Home</a>
+    <a href="paladin-demo.html">Replay demo</a>
+    <a href="findings.html">Throughput findings</a>
+    <a href="rayls-nightfall.html" class="on">Rayls &amp; Nightfall</a>
+    <a href="design.html">Recommended design</a>
+  </nav>
+</div>
+
+<div class="layout">
+  <nav class="toc">
+    <div class="tl">On this page</div>
+    <a href="#answer">The short answer</a>
+    <a href="#landscape">Why these two</a>
+    <a href="#rayls">Rayls: how it works</a>
+    <a href="#rayls-tps">Rayls: throughput</a>
+    <a href="#rayls-privacy">Rayls: blast radius</a>
+    <a href="#nightfall">Nightfall_4</a>
+    <a href="#measure">Measuring Rayls</a>
+    <a href="#sources">Sources</a>
+  </nav>
+
+  <main>
+    <div class="kicker">Alternatives investigation · 5 November 2026</div>
+    <h1>Could Rayls or Nightfall carry private interbank payments at retail volume?</h1>
+    <p class="lede">The requirement: private bank-to-bank payments, each settled individually with no batching, with Solidity
+      programmability, and no single key or enclave whose compromise exposes all history. Rayls and Nightfall_4 are the two products
+      closest to that shape, so we looked at both in depth.</p>
+    <div class="meta">Not measured: running Rayls's stack locally was blocked by this session's permission settings. Everything here comes
+      from reading the open-source code and vendor documentation, plus public reports. <span class="tag e">estimate</span> marks figures
+      derived from those sources.</div>
+
+    <!-- ===================================================== -->
+    <section id="answer">
+      <h2>The short answer</h2>
+      <div class="verdicts">
+        <div class="vcard">
+          <h3>Rayls (Parfin)</h3>
+          <div class="vrow"><span class="pill no">No batching</span><span>About <strong>1–4 payments/s across 20 banks</strong>, at 20–60 s each. Each bank can submit only one batch per token per hub block.</span></div>
+          <div class="vrow"><span class="pill notyet">Batched</span><span>Roughly 700–1,200/s, but payments wait for and settle with their batch.</span></div>
+          <div class="vrow"><span class="pill no">Blast radius</span><span>The operator can decrypt every payment. Every bank's viewing key is stored on the hub chain, encrypted to the operator's key.</span></div>
+        </div>
+        <div class="vcard">
+          <h3>Nightfall_4 (EY)</h3>
+          <div class="vrow"><span class="pill yes">Chain cost</span><span>A genuine shielded pool with rollup proofs: about <strong>6k gas per transfer</strong>, so the chain is no longer the limit.</span></div>
+          <div class="vrow"><span class="pill no">Proposer</span><span>One proposer at a time, each proof needing 144 cores and 750 GB of RAM, and blocks of 64 that wait up to 120 s to fill. Proving time isn't published.</span></div>
+          <div class="vrow"><span class="pill no">Programmable</span><span>No Solidity over private state, only transfers and token-for-token swaps. EY calls it experimental.</span></div>
+        </div>
+      </div>
+      <div class="callout info"><span class="ct">Bottom line</span>Neither meets the requirement. Rayls gets its throughput by batching and gives
+        its operator the ability to read everything. Nightfall moves the bottleneck from the chain to a single, very large rollup prover.</div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="landscape">
+      <h2>Why these two</h2>
+      <p>Solidity can't read a shielded note it doesn't own, so private programmability has three routes: run the logic where the plaintext
+        already is, among the stakeholders; compute over ciphertexts with FHE; or use a TEE. FHE needs a network-wide decryption key, and TEEs
+        are ruled out, so both have the all-history blast radius. That leaves the first route. Paladin and Rayls follow it; Nightfall is the
+        best-known enterprise shielded pool.</p>
+      <div class="tablewrap"><table>
+        <tr><th>Product</th><th>Solidity over private state</th><th>Shielded, no global key</th><th>What it gives up</th></tr>
+        <tr><td><strong>Paladin</strong> (Zeto + Pente)</td><td>Yes, in Pente groups</td><td>Yes</td><td>Throughput and maturity (<a href="findings.html">measured</a>)</td></tr>
+        <tr class="hl"><td><strong>Rayls</strong></td><td>Yes, on each bank's own chain</td><td><span class="verdict-bad">No</span>: the operator decrypts everything</td><td>Throughput without batching; blast radius</td></tr>
+        <tr class="hl"><td><strong>Nightfall_4</strong></td><td>No</td><td>Yes</td><td>Programmability, maturity, prover size</td></tr>
+        <tr><td>Zama fhEVM / Fhenix</td><td>Yes</td><td>No: a threshold network key</td><td>Blast radius; ~20 TPS today</td></tr>
+        <tr><td>ZKsync Prividium</td><td>Yes</td><td>No: the operator sees everything</td><td>It's privacy by access control</td></tr>
+        <tr><td>Payy, Railgun</td><td>No: funds leave the pool to call contracts</td><td>Yes</td><td>Programmability</td></tr>
+        <tr><td>EthSystems pool</td><td>No</td><td>Yes</td><td>Still on testnet, though formally verified</td></tr>
+        <tr><td>Aztec</td><td>Noir, not Solidity</td><td>Yes</td><td>Speed</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="rayls">
+      <h2>Rayls: how a payment between banks works</h2>
+      <ul>
+        <li><strong>Inside a bank:</strong> each bank runs a <strong>Privacy Node</strong>, its own EVM chain on <code>axyl</code> (Reth execution, Narwhal/Bullshark consensus). Any Solidity runs there. Rayls's <strong>“10k+ TPS”</strong> claim refers to this chain, so it covers transfers inside one bank.</li>
+        <li><strong>Between banks:</strong> cash moves with <strong>Enygma</strong>. The sending bank's relayer collects its customers' outgoing transfers, proves them as <strong>one batch</strong> with one Groth16 proof, and submits it to the <strong>Private Network Hub</strong>.</li>
+        <li><strong>The hub runs Hyperledger Besu with QBFT and ~5 s blocks</strong>, the same client we <a href="findings.html#chain">saturated at ~100–115 Mgas/s</a>. It stores an encrypted balance per <em>bank</em> per token, not individual payments.</li>
+        <li><strong>On arrival:</strong> the receiving bank's relayer decrypts the batch details and credits its customers on its own chain.</li>
+      </ul>
+<pre class="flow">Bank A chain        Bank A relayer                   Hub (Besu, QBFT, ~5 s)          Bank B relayer → Bank B chain
+customers pay  →    queue up to 1,000 transfers  →   transferBatch(proof, encrypted   →   decrypt, credit customers
+(crossTransfer)     prove the batch (gnark, 2–10 s)     details): verify, update bank
+                                                        balances; then a finalization tx</pre>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="rayls-tps">
+      <h2>Rayls: throughput between banks</h2>
+      <p><strong>Each bank can submit only one batch per token per hub block.</strong> The proof's nullifier is
+        <code>Poseidon(bank secret, hub block number)</code>, and the hub contract rejects a reused nullifier. The relayer runs one cycle per
+        token: fetch, prove, submit, wait, finalize. By default it handles 2 tokens at a time.</p>
+      <div class="stats">
+        <div class="stat"><div class="v">20–60<small> s</small></div><div class="l">latency of a payment between banks (Rayls's docs)</div></div>
+        <div class="stat"><div class="v">~17<small> s</small></div><div class="l">one batch cycle at k=4: 1 s fetch, ~5 s proof, ~10 s on the hub (Rayls's docs)</div></div>
+        <div class="stat"><div class="v">100–500</div><div class="l">hub TPS (Rayls's docs); adding validators adds resilience, not throughput</div></div>
+        <div class="stat"><div class="v">≤ 6</div><div class="l">banks per anonymity set, however large the network is</div></div>
+      </div>
+      <div class="tablewrap"><table>
+        <tr><th>Mode</th><th>Per bank, per token</th><th class="n">20 banks, one token</th><th>Latency</th></tr>
+        <tr class="hl"><td><strong>No batching</strong> (one payment per batch)</td><td>≤ 0.2/s at one batch per 5 s block; ~0.06/s at the 17 s cycle</td><td class="n"><strong>~1–4 /s</strong> <span class="tag e">estimate</span></td><td>20–60 s</td></tr>
+        <tr><td>Batching (up to 1,000 per batch)</td><td>up to ~1,000 per 17–30 s cycle</td><td class="n">~700–1,200 /s <span class="tag e">estimate</span></td><td>20–60 s; every payment in a batch settles together</td></tr>
+      </table></div>
+      <ul>
+        <li><strong>Batches aren't netted:</strong> each moves one bank's outgoing total to each destination bank. But the hub only ever sees per-bank totals, and every payment in a batch settles at the same moment. That is settlement batching, and it's how Rayls gets its throughput.</li>
+        <li><strong>Sharding cash over several token contracts</strong> multiplies both rows, as it does for Zeto.</li>
+        <li><strong>Brazil's central bank Drex pilot</strong> (phase 1) found the privacy solutions it tested, Rayls included, kept transactions anonymous but limited what authorities could see. The Drex platform as a whole reached up to <strong>125 TPS</strong>, which the central bank warned may not suffice for a national system. We found no Rayls-specific TPS figure from the central bank.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="rayls-privacy">
+      <h2>Rayls: blast radius</h2>
+      <div class="callout warn"><span class="ct">The operator can decrypt everything, by design</span>
+        Each bank's viewing key is encrypted to the network operator's ML-KEM key and <strong>stored on the hub chain</strong>. At startup, the
+        operator's Governance Listener recovers every bank's key, derives every bank pair's shared secret, and decrypts every payment's details,
+        which are also stored on the hub chain. One operator key therefore unlocks all history: the same class of risk as a TEE.</div>
+      <ul>
+        <li><strong>ML-KEM is post-quantum:</strong> it protects against a future quantum computer decrypting stored data, not against the key being stolen.</li>
+        <li><strong>Bank keys can be rotated.</strong> We found no threshold scheme or rotation for the operator's key.</li>
+        <li><strong>No forward secrecy between banks:</strong> each pair agrees one shared secret and reuses it for every message.</li>
+        <li><strong>Solidity between banks is asynchronous.</strong> A transfer can trigger up to 5 calls on the destination chain after it arrives. Atomic DvP goes through a separate ZkDvP note pool on the hub, at ~400k gas and ~10 s per swap (Rayls's figures).</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="nightfall">
+      <h2>Nightfall_4: yes, a shielded pool</h2>
+      <p>EY's open-source project (CC0): a pool of note commitments and nullifiers, with a UltraPlonk proof from each client and a ZK rollup on top.</p>
+      <ul>
+        <li><strong>The chain problem is solved.</strong> A proposer collects a block of <strong>64 transfers</strong> and proves the whole block once, so each transfer costs about <strong>6,000 gas</strong>, against 949k for our Paladin payment. On the Besu chain we measured, that's ~16,000 transfers/s of capacity. This is the “proof-level batching” lever from the <a href="findings.html#target">2,000/s analysis</a>.</li>
+        <li><strong>The bottleneck moves to the proposer.</strong> Only one proposer is active at a time, and each block proof needs <strong>144 cores and 750 GB of RAM</strong>. Proving time isn't published, and the proposer can't run on a laptop. Reaching 2,000/s would mean proving a 64-transfer block every 32 ms.</li>
+        <li><strong>Payments wait for a block:</strong> assembly waits up to <strong>120 s</strong> for a block to fill (first check after 15 s, target 25% full), which is batching in practice.</li>
+        <li><strong>Clients prove one transaction at a time</strong>, taking “some seconds” each, so a bank would need many client instances to send in parallel.</li>
+        <li><strong>Not programmable:</strong> deposit, transfer, withdraw, and an atomic two-party swap of different tokens (so DvP works), but no Solidity logic over private state.</li>
+        <li><strong>Access</strong> is gated by X.509 certificates, with a sanctions-list check.</li>
+        <li><strong>Maturity:</strong> its README says it is experimental and shouldn't be used for significant-value transactions, and EY disclaims ownership and liability.</li>
+      </ul>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="measure">
+      <h2>What measuring Rayls would take</h2>
+      <p>The stack runs fully locally and needs no testnet funds:</p>
+      <ol>
+        <li>Build <code>rayls-sovereign-cli</code> (Go) from source.</li>
+        <li>Run <code>rayls init --full --members 4 --no-blockscout</code>. It pulls about a dozen public images from Rayls's AWS registry: hub, relayers, proof API, bank nodes and governance.</li>
+        <li>Send <code>crossTransfer()</code> at increasing rates with batching effectively off, then on. Record per-payment latency, throughput, proof time per k, and hub gas per batch.</li>
+      </ol>
+      <p>The vendor source we read is in <code>~/Code/rayls-eval/vendor/</code>. The write-up with file-level references is
+        <code>benchmarks/rayls-nightfall.md</code>.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="sources">
+      <h2>Sources</h2>
+      <ul class="sources">
+        <li>Code and docs: <a href="https://github.com/raylsnetwork">Rayls GitHub organisation</a> (relayer, contracts, docs, CLI, axyl); <a href="https://github.com/EYBlockchain/nightfall_4_CE">EY Nightfall_4 CE</a></li>
+        <li><a href="https://www.rayls.com/products/enygma">Rayls Enygma product page</a></li>
+        <li><a href="https://www.bcb.gov.br/content/estabilidadefinanceira/real_digital_docs/piloto/Relatorio_Drex_piloto_fase_1.pdf">Relatório do Piloto Drex, fase 1 (Banco Central do Brasil)</a>;
+          <a href="https://www.blocknews.com.br/regulacao-governos/drex-houve-privacidade-nos-testes-mas-faltam-outros-requisitos/">Blocknews</a>;
+          <a href="https://convergenciadigital.com.br/governo/privacidade-e-escala-sao-os-maiores-desafios-do-drex-o-real-digital/">Convergência Digital</a>;
+          <a href="https://coingeek.com/brazil-delays-drex-cbdc-launch-over-privacy-concerns/">CoinGeek</a></li>
+        <li>Landscape: <a href="https://permissionless-technologies.com/blog/privacy-landscape-2026">Permissionless Technologies, 2026 privacy landscape</a> (a vendor's blog);
+          <a href="https://l2beat.com/privacy/summary">L2BEAT privacy</a>;
+          <a href="https://www.chaincatcher.com/en/article/2299302">EthSystems formal verification</a>;
+          <a href="https://www.zama.org/post/shielded-report-dfns-partnership-and-new-zama-sdk">Zama and Dfns</a>;
+          <a href="https://blockeden.xyz/blog/2026/01/30/prividium-zksync-privacy-banking-stack-institutional-blockchain/">Prividium</a>;
+          <a href="https://payy.network/blog/announcing-payy-network-on-ethereum">Payy Network</a></li>
+      </ul>
+    </section>
+  </main>
+</div>
+</body>
+</html>
